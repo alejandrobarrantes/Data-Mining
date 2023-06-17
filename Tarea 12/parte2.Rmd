@@ -1,0 +1,468 @@
+---
+title: "parte2"
+author: "Alejandro Barrantes Castro"
+date: "2023-06-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Ejercicio #2
+
+# Lectura de Datos
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+```
+
+# 2.1 Deteccion de 1's
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+# Constructor del cluster
+clusterExport(clp, "Datos")
+
+ignore <- clusterEvalQ(clp, {
+  library(traineR)
+  
+  ejecutar.prediccion <- function(datos, formula, muestra,metodo, ...) {
+    ttesting <- datos[muestra, ]
+    taprendizaje <- datos[-muestra, ]
+    modelo <- metodo(formula, data = taprendizaje, ...)
+    prediccion <- predict(modelo, ttesting, type = "class")
+    MC <- confusion.matrix(ttesting, prediccion)
+    return(MC)
+  }
+  return(NULL)
+})
+
+numero.filas <- nrow(Datos)
+cantidad.grupos <- 10
+cantidad.validacion.cruzada <- 5
+tam <- floor(sqrt(nrow(Datos))) 
+
+algoritmos <- c("rectangular", "triangular", "epanechnikov","biweight","triweight","cos","inv","gaussian","optimal")
+
+deteccion.si.rectangular <- c()
+deteccion.si.triangular <- c()
+deteccion.si.epanechnikov <- c()
+deteccion.si.biweight <- c()
+deteccion.si.triweight <- c()
+deteccion.si.cos <- c()
+deteccion.si.inv <- c()
+deteccion.si.gaussian <- c()
+deteccion.si.optimal <- c()
+
+# Para medir el tiempo de ejecución
+tiempo.paralelo <- Sys.time()
+
+clusterExport(clp, "tam")
+
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  si.rectangular <- 0
+  si.triangular <- 0
+  si.epanechnikov <- 0
+  si.biweight <- 0
+  si.triweight <- 0
+  si.cos <- 0
+  si.inv <- 0
+  si.gaussian <- 0
+  si.optimal <- 0
+  
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    
+    ### Inserta estas 1 variable en cada peón
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, algoritmos, function(pmetodo) {
+      MC <- ejecutar.prediccion(Datos, tipo ~ .,muestra, train.knn , kernel = pmetodo)
+      si.val <- MC[2, 2]
+      valores <- list(Tipo = pmetodo, Resultado = si.val)
+      valores
+    })
+    
+    for (j in 1:length(algoritmos)) {
+      if (resultado[[j]][[1]] == "rectangular") 
+        si.rectangular <- si.rectangular + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "triangular")
+        si.triangular <- si.triangular + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "epanechnikov")
+        si.epanechnikov <- si.epanechnikov + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "biweight")
+        si.biweight <- si.biweight + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "triweight")
+        si.triweight <- si.triweight + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "cos")
+        si.cos <- si.cos + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "inv")
+        si.inv <- si.inv + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "gaussian")
+        si.gaussian <- si.gaussian + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "optimal")
+        si.optimal <- si.optimal + resultado[[j]][[2]] 
+    }
+  }
+  
+  deteccion.si.rectangular[i] <- si.rectangular
+  deteccion.si.triangular[i] <- si.triangular
+  deteccion.si.epanechnikov[i] <- si.epanechnikov
+  deteccion.si.biweight[i] <- si.biweight
+  deteccion.si.triweight[i] <- si.triweight
+  deteccion.si.cos[i] <- si.cos
+  deteccion.si.inv[i] <- si.inv
+  deteccion.si.gaussian[i] <- si.gaussian
+  deteccion.si.optimal[i] <- si.optimal
+}
+
+stopCluster(clp) # No olvidar cerrar el proceso
+
+# GRAFICACION
+resultados <- data.frame("rectangular"     = deteccion.si.rectangular,
+                         "triangular"     = deteccion.si.triangular,
+                         "epanechnikov" = deteccion.si.epanechnikov,
+                         "biweight"     = deteccion.si.biweight,
+                         "triweight"     = deteccion.si.triweight,
+                         "cos" = deteccion.si.cos,
+                         "inv"     = deteccion.si.inv,
+                         "gaussian"     = deteccion.si.gaussian,
+                         "optimal" = deteccion.si.optimal) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Deteccion de los 1's detectados", 
+        xlab = "Numero de iteracion",
+        ylab = "Cantidad de 1's detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+##### Para este caso, los mejores metodos han sido 'inv' y cos, sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, cuesta un poco determinar cual ha sido el mejor. Seria mejor utilizar otras formas para determinar el mejor metodo.
+
+# 2.2 Deteccion de Error global
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+# Constructor del cluster
+clusterExport(clp, "Datos")
+
+ignore <- clusterEvalQ(clp, {
+  library(traineR)
+  
+  ejecutar.prediccion <- function(datos, formula, muestra,metodo, ...) {
+    ttesting <- datos[muestra, ]
+    taprendizaje <- datos[-muestra, ]
+    modelo <- metodo(formula, data = taprendizaje, ...)
+    prediccion <- predict(modelo, ttesting, type = "class")
+    MC <- confusion.matrix(ttesting, prediccion)
+    return(MC)
+  }
+  return(NULL)
+})
+
+numero.filas <- nrow(Datos)
+cantidad.grupos <- 10
+cantidad.validacion.cruzada <- 5
+tam <- floor(sqrt(nrow(Datos))) 
+
+algoritmos <- c("rectangular", "triangular", "epanechnikov","biweight","triweight","cos","inv","gaussian","optimal")
+
+deteccion.error.rectangular <- c()
+deteccion.error.triangular <- c()
+deteccion.error.epanechnikov <- c()
+deteccion.error.biweight <- c()
+deteccion.error.triweight <- c()
+deteccion.error.cos <- c()
+deteccion.error.inv <- c()
+deteccion.error.gaussian <- c()
+deteccion.error.optimal <- c()
+
+# Para medir el tiempo de ejecución
+tiempo.paralelo <- Sys.time()
+
+clusterExport(clp, "tam")
+
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  error.rectangular <- 0
+  error.triangular <- 0
+  error.epanechnikov <- 0
+  error.biweight <- 0
+  error.triweight <- 0
+  error.cos <- 0
+  error.inv <- 0
+  error.gaussian <- 0
+  error.optimal <- 0
+  
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    
+    ### Inserta estas 1 variable en cada peón
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, algoritmos, function(pmetodo) {
+      MC <- ejecutar.prediccion(Datos, tipo ~ .,muestra, train.knn , kernel = pmetodo)
+      error.metodo <- (1-(sum(diag(MC)))/sum(MC))*100
+      valores <- list(Tipo = pmetodo, Error = error.metodo)
+      valores
+    })
+    
+    for (j in 1:length(algoritmos)) {
+      if (resultado[[j]][[1]] == "rectangular") 
+        error.rectangular <- error.rectangular + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "triangular")
+        error.triangular <- error.triangular + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "epanechnikov")
+        error.epanechnikov <- error.epanechnikov + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "biweight")
+        error.biweight <- error.biweight + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "triweight")
+        error.triweight <- error.triweight + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "cos")
+        error.cos <- error.cos + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "inv")
+        error.inv <- error.inv + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "gaussian")
+        error.gaussian <- error.gaussian + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "optimal")
+        error.optimal <- error.optimal + resultado[[j]][[2]] 
+    }
+  }
+  
+  deteccion.error.rectangular[i] <- error.rectangular/ cantidad.grupos
+  deteccion.error.triangular[i] <- error.triangular/ cantidad.grupos
+  deteccion.error.epanechnikov[i] <- error.epanechnikov/ cantidad.grupos
+  deteccion.error.biweight[i] <- error.biweight/ cantidad.grupos
+  deteccion.error.triweight[i] <- error.triweight/ cantidad.grupos
+  deteccion.error.cos[i] <- error.cos/ cantidad.grupos
+  deteccion.error.inv[i] <- error.inv/ cantidad.grupos
+  deteccion.error.gaussian[i] <- error.gaussian/ cantidad.grupos
+  deteccion.error.optimal[i] <- error.optimal/ cantidad.grupos
+}
+
+stopCluster(clp) # No olvidar cerrar el proceso
+
+# GRAFICACION
+resultados <- data.frame("rectangular"     = deteccion.error.rectangular,
+                         "triangular"     = deteccion.error.triangular,
+                         "epanechnikov" = deteccion.error.epanechnikov,
+                         "biweight"     = deteccion.error.biweight,
+                         "triweight"     = deteccion.error.triweight,
+                         "cos" = deteccion.error.cos,
+                         "inv"     = deteccion.error.inv,
+                         "gaussian"     = deteccion.error.gaussian,
+                         "optimal" = deteccion.error.optimal) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Deteccion del Error Global", 
+        xlab = "Numero de iteracion",
+        ylab = "Porcentaje de Error",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+#### Para este caso, los mejores metodos han sido 'inv', cos, y optimal, sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, sigue costando un poco determinar cual ha sido el mejor. Ademas de que los resultados arrojados son bastantes similares. En este caso los 2 metodos obtienen un error global relativamente bajo comparado a los demas.
+
+# 2.3
+
+#============== Matrices
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+# Constructor del cluster
+clusterExport(clp, "Datos")
+
+ignore <- clusterEvalQ(clp, {
+  library(traineR)
+  
+  ejecutar.prediccion <- function(datos, formula, muestra,metodo, ...) {
+    ttesting <- datos[muestra, ]
+    taprendizaje <- datos[-muestra, ]
+    modelo <- metodo(formula, data = taprendizaje, ...)
+    prediccion <- predict(modelo, ttesting, type = "class")
+    MC <- confusion.matrix(ttesting, prediccion)
+    return(MC)
+  }
+  return(NULL)
+})
+
+numero.filas <- nrow(Datos)
+cantidad.grupos <- 10
+cantidad.validacion.cruzada <- 5
+tam <- floor(sqrt(nrow(Datos))) 
+
+algoritmos <- c("rectangular", "triangular", "epanechnikov","biweight","triweight","cos","inv","gaussian","optimal")
+
+MCs.rectangular <- list()
+MCs.triangular <- list()
+MCs.epanechnikov <- list()
+MCs.biweight <- list()
+MCs.triweight <- list()
+MCs.cos <- list()
+MCs.inv <- list()
+MCs.gaussian <- list()
+MCs.optimal <- list()
+
+# Para medir el tiempo de ejecución
+tiempo.paralelo <- Sys.time()
+
+clusterExport(clp, "tam")
+
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  MC.rectangular <- matrix(c(0,0,0,0), nrow=2)
+  MC.triangular <- matrix(c(0,0,0,0), nrow=2)
+  MC.epanechnikov <- matrix(c(0,0,0,0), nrow=2)
+  MC.biweight <- matrix(c(0,0,0,0), nrow=2)
+  MC.triweight <- matrix(c(0,0,0,0), nrow=2)
+  MC.cos <- matrix(c(0,0,0,0), nrow=2)
+  MC.inv <- matrix(c(0,0,0,0), nrow=2)
+  MC.gaussian <- matrix(c(0,0,0,0), nrow=2)
+  MC.optimal <- matrix(c(0,0,0,0), nrow=2)
+  
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    
+    ### Inserta estas 1 variable en cada peón
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, algoritmos, function(pmetodo) {
+      MC <- ejecutar.prediccion(Datos, tipo ~ .,muestra, train.knn , kernel = pmetodo)
+      valores <- list(Tipo = pmetodo, Resultado = MC)
+      valores
+    })
+    
+    for (j in 1:length(algoritmos)) {
+      if (resultado[[j]][[1]] == "rectangular") 
+        MC.rectangular <- MC.rectangular + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "triangular")
+        MC.triangular <- MC.triangular + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "epanechnikov")
+        MC.epanechnikov <- MC.epanechnikov + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "biweight")
+        MC.biweight <- MC.biweight + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "triweight")
+        MC.triweight <- MC.triweight + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "cos")
+        MC.cos <- MC.cos + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "inv")
+        MC.inv <- MC.inv + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "gaussian")
+        MC.gaussian <- MC.gaussian + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "optimal")
+        MC.optimal <- MC.optimal + resultado[[j]][[2]] 
+    }
+  }
+  
+  MCs.rectangular[[i]] <- MC.rectangular
+  MCs.triangular[[i]] <- MC.triangular
+  MCs.epanechnikov[[i]] <- MC.epanechnikov
+  MCs.biweight[[i]] <- MC.biweight
+  MCs.triweight[[i]] <- MC.triweight
+  MCs.cos[[i]] <- MC.cos
+  MCs.inv[[i]] <- MC.inv
+  MCs.gaussian[[i]] <- MC.gaussian
+  MCs.optimal[[i]] <- MC.optimal
+}
+
+stopCluster(clp) # No olvidar cerrar el proceso
+```
+
+```{r}
+# GRAFICACION 1's
+resultados <- data.frame("rectangular"     = sapply(MCs.rectangular,precision("1")),
+                         "triangular"     =sapply(MCs.triangular,precision("1")) ,
+                         "epanechnikov" = sapply(MCs.epanechnikov,precision("1")),
+                         "biweight"     = sapply(MCs.biweight,precision("1")),
+                         "triweight"     = sapply(MCs.triweight,precision("1")),
+                         "cos" = sapply(MCs.cos,precision("1")),
+                         "inv"     = sapply(MCs.inv,precision("1")),
+                         "gaussian"     =sapply(MCs.gaussian,precision("1")) ,
+                         "optimal" = sapply(MCs.optimal,precision("1"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de 1's detectados",main = "Comparacion de porcentaje de 1's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+
+
+
+#===============================================
+
+
+# GRAFICACION 0's
+resultados <- data.frame("rectangular"     = sapply(MCs.rectangular,precision("0")),
+                         "triangular"     =sapply(MCs.triangular,precision("0")) ,
+                         "epanechnikov" = sapply(MCs.epanechnikov,precision("0")),
+                         "biweight"     = sapply(MCs.biweight,precision("0")),
+                         "triweight"     = sapply(MCs.triweight,precision("0")),
+                         "cos" = sapply(MCs.cos,precision("0")),
+                         "inv"     = sapply(MCs.inv,precision("0")),
+                         "gaussian"     =sapply(MCs.gaussian,precision("0")) ,
+                         "optimal" = sapply(MCs.optimal,precision("0"))) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de 0's detectados",main = "Comparacion de porcentaje de 0's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+
+#==========================================
+
+# GRAFICACION Error global
+
+
+resultados <- data.frame("rectangular"     = sapply(MCs.rectangular,error.global),
+                         "triangular"     =sapply(MCs.triangular,error.global) ,
+                         "epanechnikov" = sapply(MCs.epanechnikov,error.global),
+                         "biweight"     = sapply(MCs.biweight,error.global),
+                         "triweight"     = sapply(MCs.triweight,error.global),
+                         "cos" = sapply(MCs.cos,error.global),
+                         "inv"     = sapply(MCs.inv,error.global),
+                         "gaussian"     =sapply(MCs.gaussian,error.global) ,
+                         "optimal" = sapply(MCs.optimal,error.global)) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 0))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, max(resultados)),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de Error Global",main = "Comparacion de Error Global",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+
+```
+
+# 2.3 y 2.4
+
+#### Se puede observar que los mejores resultados se obtienen al utilizar cos, inv u optimal tanto en error como en acierto de 1's y 0's. Por tanto, yo escogeria y utilizaria estos dos metodos a la hora de entrenar el modelo

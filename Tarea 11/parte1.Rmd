@@ -1,0 +1,113 @@
+---
+title: "parte2"
+author: "Alejandro Barrantes Castro"
+date: "2023-06-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+ttraining <- Datos[-indice, ]
+```
+
+# EJERCICIO 1
+
+## 1.1
+```{r}
+str(datos)
+summary(datos)
+dim(datos)
+```
+
+
+## 1.2
+
+```{r}
+## Ejercicio 1.2
+
+v.error.tt<-rep(0,5)
+
+for(i in 1:5) {
+  muestra <- createDataPartition(Datos$tipo, times=1, p=0.25, list=FALSE)
+  ttesting <- Datos[muestra, ]
+  taprendizaje <- Datos[-muestra, ]
+  
+  modelo <- train.knn(tipo~.,data=taprendizaje,kmax=50)
+  
+  prediccion <- predict(modelo,ttesting,type = "class")
+  
+  MC <- confusion.matrix(ttesting, prediccion)
+
+  acierto<-sum(diag(MC))/sum(MC)
+  error <- 1- acierto
+  v.error.tt[i] <- error
+}  
+plot(v.error.tt,col="red",type="b",main="Variación del Error",xlab="Número de iteración",ylab="Estimación del Error")
+
+```
+
+## 1.3
+
+```{r}
+## Ejercicio 1.3
+
+n <- dim(Datos)[1] # Aquí n=150
+## Vamos a generar el modelo dejando un grupo para testing y los demás datos para aprendizaje.
+v.error.kg<-rep(0,5)
+# Hacemos validación cruzada 10 veces para ver que el error se estabiliza
+for(i in 1:5) {
+  errori <- 0
+  # Esta instrucción genera los k=5 grupos (Folds)
+  grupos <- createFolds(1:n,10) # grupos$Fold0i es el i-ésimo grupo  
+  # Este ciclo es el que hace "cross-validation" (validación cruzada) con 5 grupos (Folds)
+  for(k in 1:10) {    
+      muestra <- grupos[[k]] # Por ser una lista requiere de doble paréntesis
+      ttesting <- Datos[muestra,]
+      taprendizaje <- Datos[-muestra,]
+      modelo <- train.knn(tipo~.,data=taprendizaje,kmax=50)
+      prediccion <- predict(modelo,ttesting,type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)  
+      # Porcentaje de buena clasificación y de error
+      acierto<-sum(diag(MC))/sum(MC)
+      error <- 1 - acierto
+      errori <- errori + error
+  } 
+  v.error.kg[i] <- errori/10
+}
+plot(v.error.kg, col = "magenta", type = "b", ylim = c(min(v.error.kg, v.error.tt), max(v.error.kg, 
+    v.error.tt)), main = "Variación del Error", xlab = "Número de iteración", 
+    ylab = "Estimación del Error")
+points(v.error.tt, col = "blue", type = "b")
+legend("topright", legend = c("K-ésimo grupo","Error anterior"), col = c("magenta", 
+    "blue","red","green"), lty = 1, lwd = 1)
+
+```
+
+Gracias al grafico, se puede concluir que el error de knn con k-fold-cross-validation es mucho mas estable y menor. Lo que deja como conclusion que que es mucho mejor utilizar el metodo de fold-cross-validation, es decir, en grupos, donde se pueda utilizar y probar toda la tabla, para asi poder obtener un error mas preciso 

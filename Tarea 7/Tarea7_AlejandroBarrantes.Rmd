@@ -1,0 +1,310 @@
+---
+title: "Tarea7_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-05-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(traineR)
+library(caret)
+library(class)
+library(e1071)
+library(kknn)
+library (plotly)
+```
+
+# EJERCICIO #1
+
+## 1.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+taprendizaje <- Datos[-indice, ]
+```
+
+## 1.2
+
+```{r}
+tabla.comparacion <- data.frame()
+
+#Linear
+modelo <- train.svm(tipo~., data = taprendizaje, kernel = "linear")
+prediccion <- predict(modelo, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"svm-linear"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+#radial
+modelo <- train.svm(tipo~., data = taprendizaje, kernel = "radial")
+prediccion <- predict(modelo, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"svm-radial"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+#Polynomial
+modelo <- train.svm(tipo~., data = taprendizaje, kernel = "polynomial")
+prediccion <- predict(modelo, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"svm-polynomial"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+#Sigmoid
+modelo <- train.svm(tipo~., data = taprendizaje, kernel = "sigmoid")
+prediccion <- predict(modelo, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"svm-sigmoid"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+
+```
+
+## 1.3
+
+```{r}
+tam <- floor(sqrt(nrow(Datos))) 
+
+modelo<- train.knn(tipo~., data = taprendizaje, kmax=tam)
+prediccion <- predict(modelo, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"svm polynomial"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+tabla.comparacion <- select(tabla.comparacion, Modelo, everything())
+tabla.comparacion
+```
+
+Como se puede observar, los metodos de SVM superan en precision al metodo knn, la mayoria o casi todos son mejores que knn. Mas especificamente, el metodo SVM con kernel "linear" es el mejor entre todos.
+
+# EJERCICIO #2
+
+## 2.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("titanicV2020.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+
+# Eliminamos las columnas PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked: 
+Datos <- subset(Datos, select = -c(PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked))
+#omitimos nulos
+Datos<-na.omit(Datos)
+#recodificamos
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+```
+
+## 2.2
+
+```{r}
+#--------------------------------------
+#2.2
+muestra <- sample(nrow(Datos), floor(0.8 * nrow(Datos)))
+taprendizaje <- Datos[muestra,]
+ttesting <- Datos[-muestra,]
+```
+
+## 2.3
+
+```{r}
+#--------------------------------------
+#2.3
+#tabla de comparacion de valores
+tabla.comparacion <- data.frame()
+
+#modelo con SVM
+modelo.svm <- train.svm(Survived~., data = taprendizaje)
+prediccion <- predict(modelo.svm, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"svm"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+```
+
+## 2.4
+
+```{r}
+#--------------------------------------
+#2.4
+#modelo con train.knn
+
+modelo<-train.knn(Survived~.,data=taprendizaje, kmax=floor(sqrt(nrow(Datos))))
+prediccion <- predict(modelo, ttesting, type = "class")
+MC <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"knn"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+
+tabla.comparacion <- select(tabla.comparacion, Modelo, everything())
+
+#Comparaciones
+tabla.comparacion
+```
+
+Como podemos observar en la tabla de comparaciones, el metodo SVM es mejor que el metodo KNN, ya que la precision global es mas alta, el error global es mas bajo, y la precision por categoria tambien es mas alta que en el modelo con KNN.
+
+# EJERCICIO #3
+
+## 3.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("ZipData_2020.csv", header=TRUE, sep=';',dec='.', stringsAsFactors = T)
+
+```
+
+## 3.2
+
+```{r}
+set.seed(123)
+
+tam<-dim(Datos)
+n<-tam[1]
+muestra <- sample(1:n,floor(n*0.20))
+ttesting <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+
+modelo<-train.svm(Numero~.,data=(taprendizaje),kmax=floor(sqrt(n)))
+
+prediccion <- predict(modelo, ttesting, type = "class")
+MC<-confusion.matrix(ttesting, prediccion)
+general.indexes(mc=MC)
+```
+
+Los resultados son bastante buenos, ya que se obtiene una precision global por encima de los 90%, ademas de que por categoria tambien obtenemos mas del 90% de precision, hasta mas del 95% en la mayoria, por lo que lo convierte en un muy buen modelo.
+
+## 3.3
+
+```{r}
+#tabla de comparacion de valores
+tabla.comparacion <- data.frame()
+
+modelo <- train.svm(Numero~., data = taprendizaje,kmax=floor(sqrt(n)))
+prediccion <- predict(modelo,ttesting)
+MC<-confusion.matrix(ttesting,prediccion)
+
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"SVM"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+# tabla.comparacion
+
+modelo<-train.knn(Numero~.,data=(taprendizaje),kmax=floor(sqrt(n)))
+prediccion <- predict(modelo, ttesting, type = "class")
+MC<-confusion.matrix(ttesting, prediccion)
+
+metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+metricas$Modelo <-"KNN"
+tabla.comparacion <- rbind(tabla.comparacion,metricas)
+
+
+tabla.comparacion <- select(tabla.comparacion, Modelo, everything())
+tabla.comparacion
+```
+
+Como podemos observar en la tabla de comparaciones, el metodo SVM es mejor que el metodo KNN, ya que la precision global es mas alta, el error global es mas bajo, y la precision por categoria tambien es mas alta que en el modelo con KNN.
+
+# EJERCICIO #4
+
+```{r}
+datos <- data.frame ( x = c(1 , 1 , 1 , 3 , 1 , 3 , 1 , 3 , 1) ,
+                        y = c(0 , 0 , 1 , 1 , 1 , 2 , 2 , 2 , 1) ,
+                        z = c(1 , 2 , 2 , 4 , 3 , 3 , 1 , 1 , 0) ,
+                        clase = c(" Rojo ", " Rojo ", " Rojo ",
+                                  " Rojo ", " Rojo ", " Azul ",
+                                  " Azul ", " Azul ", " Azul "))
+datos$clase <- trimws(datos$clase)
+datos$clase <- factor(datos$clase)
+datos$clase <- as.numeric(datos$clase)
+
+dim(datos)
+datos$clase
+str(datos)
+```
+
+## 4.1
+
+```{r}
+plot_ly(data = datos) %>%
+  add_trace(x = ~x, y = ~y, z = ~z, color = ~clase,
+            colors = c("#0C4B8E", "#BF382A"),
+            mode = "markers", type="scatter3d")
+
+```
+
+## 4.2
+
+```{r}
+modelo <- svm(clase ~ ., data = datos, kernel = "linear")
+
+vectores_soporte <- modelo$SV
+coeficientes <- modelo$coefs
+intercepto <- modelo$rho
+
+# obtener las variables predictoras (x, y, z) en una matriz
+matriz_datos <- as.matrix(datos)
+
+# calcular los límites de los ejes x, y y z para el gráfico
+x_lim <- range(datos$x)
+y_lim <- range(datos$y)
+z_lim <- range(datos$z)
+
+hiperplano <- function(x, y) {
+  (-coeficientes[1] * x - coeficientes[2] * y - intercepto) / coeficientes[3]
+}
+
+# crear la visualización del hiperplano de separación
+plot_ly(x = vectores_soporte[, 1], y = vectores_soporte[, 2], z = vectores_soporte[, 3],
+        color = (modelo$y), colors = c("#0C4B8E", "#BF382A"),
+        mode = "markers", type="scatter3d") %>%
+  add_trace(x = matriz_datos[, 1], y = matriz_datos[, 2], z = matriz_datos[, 3],
+            color = (datos$clase), colors = c("#0C4B8E", "#BF382A"),
+            mode = "markers", type="scatter3d") %>%
+  add_trace(x = x_lim[1]:x_lim[2], y = y_lim[1]:y_lim[2],
+            z = hiperplano(x_lim[1]:x_lim[2], y_lim[1]:y_lim[2]),
+            type = "surface", opacity = 0.5) %>%
+  layout(scene = list(xaxis = list(range = x_lim),
+                      yaxis = list(range = y_lim),
+                      zaxis = list(range = z_lim)))
+
+```
+
+## 4.3
+
+La regla de clasificación sería la siguiente: un punto se clasifica como "Rojo" si -0.5x + 0.5y + 1.5z - 1 \> 0, y se clasifica como "Azul" en caso contrario.
+
+## 4.4
+
+El margen para el hiperplano óptimo es de 1/\|w\| = 2/3. Los vectores de soporte son las observaciones 3 y 9.
+
+## 4.5
+
+Un ligero movimiento de la octava observación no afectaría el hiperplano de margen máximo porque no es un vector de soporte.
+
+## 4.7
+
+```{r}
+plot(datos$x, datos$y, col = ifelse(datos$clase == "Rojo", "red", "blue"), pch = 19)
+legend("topright", legend = levels(factor(datos$clase)), col = c("red", "blue"), pch = 19)
+abline(a = 0, b = -1, col = "green")
+```

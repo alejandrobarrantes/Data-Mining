@@ -1,0 +1,683 @@
+---
+title: "Tarea1_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-03-15"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Ejercicio 1
+
+### 1.a
+#### **Estadística:** Es una rama de las matemáticas que se centra en la recolección, análisis e interpretación de datos. Se utiliza para describir los datos de una manera grafica y sencilla de visualizar o entender.
+
+#### **Análisis de Datos:** Como lo dice su nombre, Es el proceso de examinar datos con el fin de obtener información útil y tomar decisiones informadas. Es un proceso muy importante, ya que permite encontrar diferentes patrones o pistas en los datos recolectados.
+
+#### **Mineria de Datos:** Es el proceso de descubrir patrones y relaciones en grandes conjuntos de datos utilizando técnicas de inteligencia artificial, estadísticas y aprendizaje automático, ademas de diferentes lenguajes de programacion.
+
+#### **Machine Learning:** Es una rama de la inteligencia artificial que se centra en el desarrollo de algoritmos que pueden aprender de los datos. Se ejecuta automaticamente y mediante los datos que recolecta atraves del tiempo, desarrolla un conocimiento mas amplio que le permite ejecutar muchas tareas.
+
+#### **Big Data:** Son grandes conjuntos de datos, los cuales no pueden ser procesados o analizados utilizando herramientas de software tradicionales. 
+
+#### **Ciencia de Datos:** Es la combinacion completa, ya que incluye desde estadística, aprendizaje automático, minería de datos hasta visualización de datos para analizar y obtener información útil a partir de los datos para corporaciones o empresas y asi puedan aumentar su alcance, ventas, publicidad, clientes, etc.
+
+### 1.b
+
+#### Estan altamente relacionadas, ya que el avance de una le ha permitido a la otra desarrollarse tambien. Desde que el almacenamiento al que podemos acceder es mucho mas grande y economico, el numero y cantidad de datos, estadisticas, recopilaciones, etc que almacenamos ha crecido tambien. Por lo tanto al tener mas almacenamiento, permite tener mas datos recopilados con facilidad.
+
+# ===================================================
+## Ejercicio 2
+
+### 2.1: Introduzca x y y como vectores en R
+
+```{r}
+x <- c(3, -5, 31, -1, -9, 10, 0, 18)
+y <- c(1, 1, -3, 1, -99, -10, 10, -7)
+```
+
+### 2.2 Calcule la media, la varianza, la raiz cuadrada y la desviacion estandar de y
+```{r}
+print(mean(y))
+print(var(y))
+print(sqrt(y))
+print(sd(y))
+```
+
+
+### 2.3 Calcule la media, la varianza, la raiz cuadrada y la desviacion estandar de x
+```{r}
+print(mean(x))
+print(var(x))
+print(sqrt(x))
+print(sd(x))
+```
+
+
+### 2.4 Calcule la correlacion entre x y y.
+```{r}
+print(cor(x,y))
+```
+
+
+### 2.5 Escriba un comando en R para extraer las entradas 2 a la 7 de x.
+```{r}
+print(x[2:7])
+```
+
+### 2.6 Escriba un comando en R para extraer las entradas de y excepto la 2 y la 7.
+```{r}
+print(y[-c(2,7)])
+```
+
+### 2.7 Escriba un comando en R para extraer las entradas de y menores a -3 o mayores a 10.
+
+```{r}
+menores.3.mayores.10 <- y<(-3) | y>10
+print(y[menores.3.mayores.10])
+```
+
+### 2.8 Escriba un comando en R para extraer las entradas de x mayores a 0 y que sean numeros
+### pares.
+```{r}
+mayores.0.pares <- x>(0) & x%%2==0
+print(x[mayores.0.pares])
+```
+
+
+# ==============================================================
+## Ejercicio 3
+
+```{r}
+A<-matrix(c(1,2,3,4,5,6,7,8,9,10,11,12),nrow=4,"byrow"="true")
+print(A)
+```
+
+```{r}
+A[1,1:3]
+```
+### Se obtienen numeros desde la posicion (1,1), 3 hacia la derecha
+
+
+```{r}
+A[1:4,2]
+```
+### Se obtienen numeros desde la fila 1 a la 4, en la 2da columna, osea verticalmente
+
+```{r}
+A[3,3] 
+```
+### Se obtienen el numero de la posicion (3,3) en la matriz. Fila 3, columna 3
+
+```{r}
+A[11] 
+```
+### Se obtienen el numero 9, ya que es el numero #11 en la matriz si contamos de fila en fila verticalmente
+```{r}
+A[20]
+```
+### Se obtienen NA, ya que la matriz no cuenta con mas de 12 posiciones, por lo tanto A[20] va a ser nulo
+```{r}
+# A[5,4]
+```
+### Genera error, ya que no existe tal entrada o posicion en la matriz, debido a que es una matriz 4x3.
+```{r}
+#A[1,1,1] 
+```
+### La matriz es de una dimension (x,y), y en el codigo esta pidiendo una posicion en la matriz (x,y,z), por lo tanto, va a generar un error, ya que son dimensiones diferentes
+
+
+# ==============================================================
+## Ejercicio 4
+
+### El comando 'as.matrix' funciona para convertir un objeto en una matriz, estos objetos pueden ser estructuras de datos como dataframes, vectores o listas. Ejemplo: Supongamos que tenemos el siguiente dataframe y lo convertimos a matriz:
+
+
+```{r}
+df <- data.frame(a = c(1,2,3,4), b = c(5,6,7,8), c = c(9,10,11,12))
+matriz <- as.matrix(df)
+matriz
+
+```
+### El comando 'as.data.frame' funciona para convertir un objeto en un dataframe, estos objetos pueden ser estructuras de datos como matrices, vectores o listas. Ejemplo: Utilizaremos la matriz anterior, ahora la convertimos a data frame de nuevo:
+
+```{r}
+df <- as.data.frame(matriz)
+df
+```
+
+
+# ================================================================
+## Ejercicio 5 
+
+```{r}
+mi_df <- data.frame(
+  "Peso" = c(76,67,55,57,87,48), 
+  "Edad" = c(25,23,19,18,57,13), 
+  "Nivel Educativo" = c("Lic","Bach","Bach","Bach","Dr","Msc")
+)
+
+(mi_df)
+```
+
+
+# ==================================================================
+## Ejercicio 6
+
+### 6.1 y = (2, 4, 6, 8), as´ı definido y es el vector formado por las componentes positivas de x.
+```{r}
+x <- c(2, -5, 4, 6, -2, 8)
+
+y<-x>0
+y<-c(x[y])
+print(y)
+```
+
+### 6.2 z = (−5, −2), as´ı definido z es el vector formado por las componentes negativas de x.
+```{r}
+negativos<- x<0
+z<-c(x[negativos])
+print(z)
+```
+
+
+### 6.3 v = (−5, 4, 6, −2, 8), as´ı definido v es el vector x eliminada la primera componente.
+```{r}
+v<-c(x[-1])
+print(v)
+```
+
+
+### 6.4 w = (2, 4, −2), as´ı definido w es el vector x tomando las componentes con ´ındice impares, es decir, x[1] = 2, x[3] = 4 y x[5] = −2.
+
+```{r}
+w <- x[c(1, 3, 5)]
+print(w)
+```
+
+
+
+
+
+# ===================================================
+## Ejercicio 7
+
+
+```{r}
+x<-seq(0,2*pi,length=100)
+plot(cos(x))
+plot(x,cos(x),col="red")
+```
+
+### En el primer caso, utiliza valores predeterminados para x, y en el segundo, especifica que deben ser coseno de x, ademas de que utiliza el color rojo para poder tener una mejor compresion del grafico
+
+# ====================================================
+## Ejercicio 8
+```{r}
+
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+data <- read.csv("DJTable.csv", header = TRUE,
+                                 sep = ";", dec = ",", row.names = 1)
+x<-data[c("IBM","CSCO","INTC","MSFT")]
+y<-data[0]
+x
+
+#x<-c(ibm,csco,intc,msft)
+
+
+plot(main="Valor de las Acciones",x,col=c("red","blue"))
+```
+
+
+
+# ====================================================
+## Ejercicio 9
+
+```{r}
+#install.packages("ggplot2")
+library(ggplot2)
+
+ggplot(data=x)
+```
+
+
+# ====================================================
+## Ejercicio 10
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+Datos <- read.table('EjemploAlgoritmosRecomendacion.csv',
+                     header=TRUE, sep=';',dec=',',row.names=1)
+
+#Calcule la dimensi´on de la Tabla de Datos
+dim(Datos)
+
+#Despliegue las primeras 2 columnas de la tabla de datos.
+Datos[1:2]
+
+#Ejecute un “summary” y un “str” de los datos.
+summary(Datos)
+str(Datos)
+
+#Calcule la Media y la Desviaci´on Est´andar para todas las variables cualesquiera
+colMeans(Datos)
+
+apply(Datos, 2, sd)
+```
+
+
+```{r}
+#Ahora repita los ´ıtems anteriores pero leyendo el archivo como sigue:
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+Datos <- read.table('EjemploAlgoritmosRecomendacion.csv',
+                     header=TRUE, sep=';',dec='.',row.names=1)
+#Calcule la dimensi´on de la Tabla de Datos
+dim(Datos)
+
+#Despliegue las primeras 2 columnas de la tabla de datos.
+Datos[,1:2]
+
+#Ejecute un “summary” y un “str” de los datos.
+summary(Datos)
+str(Datos)
+
+#Calcule la Media y la Desviaci´on Est´andar para todas las variables cualesquiera
+#colMeans(Datos)
+#sd(Datos)
+#apply(Datos, 2, sd)
+```
+### Da error debido a que los datos se leen como tipo "character" y no como "numeric", debido al "sep=,", ya que no separa los decimales de forma correcta. Por lo tanto, no puede aplicarle las funciones como colMeans o sd a los datos.
+
+# ====================================================
+## Ejercicio 11
+```{r}
+getwd()
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+datos <- read.table('EjemploAlgoritmosRecomendacion.csv',header=TRUE, sep=';',dec=',')
+
+```
+
+### 11.a
+```{r}
+plot(x=datos$VelocidadEntrega,y=datos$Precio)
+qplot(x=datos$VelocidadEntrega,y=datos$Precio)
+```
+### 11.b
+```{r}
+library(scatterplot3d)
+
+scatterplot3d(x=datos$VelocidadEntrega,y=datos$Precio, z=datos$Durabilidad)
+```
+
+### 11.c
+```{r}
+library(corrplot)
+
+matriz.cor<-cor(datos[,-1])
+
+corrplot(matriz.cor)
+
+corrplot(matriz.cor, 
+         method = "color",
+         title = "Correlación entre las variables de la tabla Ejemplos de Recomendacion")
+
+corrplot(matriz.cor, 
+         method = "square",
+         title = "Correlación entre las variables de la tabla Ejemplos de Recomendacion")
+
+corrplot(matriz.cor, 
+         method = "ellipse",
+         title = "Correlación entre las variables de la tabla Ejemplos de Recomendacion")
+
+
+```
+### 11.d
+```{r}
+boxplot(datos[,-1],
+        outcol = "black",
+        outpch = 19,
+        main = "Valores atípicos para la tabla de datos Ejemplos de Recomendacion")
+```
+
+
+# ============================================
+## Ejercicio 12 Cargue la tabla de datos que est´a en el archivo Datosv.csv haga lo siguiente:
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+Datos <- read.table('SAheart.csv',header=TRUE, sep=';',dec=',')
+```
+### Calcule la dimensi´on de la Tabla de Datos.
+
+
+```{r}
+dim(Datos)
+```
+
+### Despliegue las primeras 3 columnas de la tabla de datos.
+```{r}
+Datos[1:3]
+```
+### Ejecute un summary y un str de los datos.
+```{r}
+summary(Datos)
+
+str(Datos)
+```
+### Usando el comando cor de R calcule la correlaci´on entre las variables tobacco y alcohol.
+```{r}
+cor(as.numeric(Datos$tobacco),as.numeric(Datos$alcohol))
+```
+### Calcule la suma de las columnas con variables cuantitativas (num´ericas).
+```{r}
+cuantitativas<-sapply(Datos, is.numeric)
+colSums(Datos[, cuantitativas])
+```
+### Calcule para todas las variables cuantitativas presentes en el archivo SAheart.csv: El mınimo, el maximo, la media, la mediana y para la variables chd determine la cantidad de Si y de No.
+```{r}
+min(Datos[,1])
+min(Datos[,2])
+min(Datos[,3])
+min(Datos[,4])
+min(Datos[,6])
+min(Datos[,7])
+min(Datos[,8])
+min(Datos[,9])
+
+max(Datos[,1])
+max(Datos[,2])
+max(Datos[,3])
+max(Datos[,4])
+max(Datos[,6])
+max(Datos[,7])
+max(Datos[,8])
+max(Datos[,9])
+
+mean(Datos[,1])
+mean(Datos[,2])
+mean(Datos[,3])
+mean(Datos[,4])
+mean(Datos[,6])
+mean(Datos[,7])
+mean(Datos[,8])
+mean(Datos[,9])
+
+median(Datos[,1])
+median(Datos[,2])
+median(Datos[,3])
+median(Datos[,4])
+median(Datos[,6])
+median(Datos[,7])
+median(Datos[,8])
+median(Datos[,9])
+
+
+cant.si<- Datos$chd == "Si" 
+sum(cant.si)
+
+cant.si<- Datos$chd == "No" 
+sum(cant.si)
+
+
+```
+
+
+
+# ============================================
+## 13 Programe en R una funci´on que genera 200 n´umeros al azar entre 1 y 500 y luego calcula cuantos estan entre el 50 y 450, ambos inclusive
+```{r}
+ejercicio_13 <- function() {
+  #genera 200 numeros entre 1 y 500
+  numeros <- sample(1:500, 200, replace = TRUE)
+  
+  cantidad <- sum(numeros >= 50 & numeros <= 450)
+  
+  return(cantidad)
+}
+
+
+# Llamamos a la funcion
+ejercicio_13()
+```
+
+
+
+
+# ============================================
+## Ejercicio 14 Desarrolle una funci´on que calcula el costo de una llamada telef´onica que ha durado t minutos sabiendo que si t < 1 el costo es de 0,4 d´olares, mientras que para duraciones superiores el costo es de 0,4 + (t − 1)/4 d´olares, la funci´on debe recibir el valor de t
+
+```{r}
+costo_llamada <- function(t) {
+  if (t < 1) {
+    costo <- 0.4
+  } else {
+    costo <- 0.4 + (t-1)/4
+  }
+  return(costo)
+}
+
+costo_llamada(2)
+```
+
+
+
+# ============================================
+## 15 Traza
+```{r}
+traza.matriz <- function(A) {
+  filas <- nrow(A)
+  traza <- 0
+  for (i in 1:filas) {
+    traza <- traza + A[i,i]
+  }
+  return(traza)
+}
+x<-matrix(data=c(9, 3, 4,1, 3, -1,4, 12, -2),nrow=3,ncol = 3, byrow = T)
+
+traza.matriz(x)
+```
+
+
+# ============================================
+## Ejercicio 16 Fibonacci
+```{r}
+fibonacci <- function(n) {
+  if (n <= 0) {
+    return("")
+  } else if (n == 1) {
+    return(0)
+  } else if (n == 2) {
+    return(c(0, 1))
+  } else {
+    fibo <- c(0, 1)
+    for (i in 3:n) {
+      fibo[i] <- fibo[i-1] + fibo[i-2]
+    }
+    return(fibo)
+  }
+}
+fibonacci(10)
+```
+
+# ============================================
+## 17
+```{r}
+mayor.cuadrado <- function(x) {
+  i <- 0
+  while (i^2 <= x) {
+    i <- i + 1
+  }
+  return((i-1)^2)
+}
+mayor.cuadrado(30)
+```
+
+
+
+# ============================================
+## 18
+
+```{r}
+datos_alumnos <- data.frame(
+  nombre = c("Matias", "Alejandro", "Alexander", "Raquel", "Eduardo", "Sonia", "Juan", "Pablo", "Isaac", "Olga"), 
+  edad = c(16, 17, 14, 15, 17, 18, 16, 15, 16, 18),
+  Año_nacimiento = 2023 - c(16, 17, 14, 15, 17, 18, 16, 15, 16, 18),
+  Número_teléfono = c("65789431", "87654312", "76543891", "65456554", "89345632", "63549023", "73902345", "81230954", "63405623", "89645982"),
+  row.names = c("Matias", "Alejandro", "Alexander", "Raquel", "Eduardo", "Sonia", "Juan", "Pablo", "Isaac", "Olga"))
+
+# Mostramos el DataFrame creado
+print(datos_alumnos)
+```
+
+
+# ============================================
+## Ejercicio 19
+
+### 19.1 El numero de permutaciones con repeticion de r objetos tomados de n.
+```{r}
+ej.19.1 <- function(n, r) {
+  n^r
+}
+ej.19.1(3,4)
+```
+### 19.2 El numero de permutaciones sin repeticion, o arreglo, de r objetos tomados de n.
+```{r}
+ej.19.2<- function(n, r) {
+  factorial(n) / factorial(n-r)
+}
+
+ej.19.1(4,3)
+```
+### 19.3
+```{r}
+ej.19.3 <- function(n, k) {
+  factorial(n) / prod(factorial(rep(n/k, k)))
+}
+
+ej.19.3(4,3)
+```
+### 19.4
+```{r}
+ej.19.4 <- function(n, r) {
+  factorial(n) / (factorial(r) * factorial(n-r))
+}
+
+ej.19.4(4,3)
+```
+### 19.5
+```{r}
+#ej.19.5 <- function(n, r) {
+ # combs(n+r-1, r)
+#}
+
+#ej.19.5(4,3)
+```
+### 19.6
+```{r}
+#install.packages("gmp")
+library(gmp)
+
+
+Stirling2(4,3)
+```
+
+# ====================================================
+## Ejercicio 20 Desarrolle una funci´on R que recibe un DataFrame que retorna la cantidad de entradas de este DataFrame que son divisibles entre 3.
+```{r}
+divisibles.entre.3 <- function(df) {
+  
+  divisibles <- df %% 3 == 0
+  
+  cant <- sum(divisibles)
+  
+  return(cant)
+}
+
+df<-data.frame(x=c(1:7), y=c(7:13))
+
+divisibles.entre.3(df)
+```
+
+# ====================================================
+## Ejercicio 21 Desarrolle una funcion R que recibe un DataFrame y dos numeros de columna y que retorna en una lista el nombre de las variables correspondientes a las columnas, la covarianza y la correlacion entre esas dos variables.
+```{r}
+cal.cov.cor <- function(df, col1, col2) {
+  var1 <- colnames(df)[col1]
+  var2 <- colnames(df)[col2]
+  covar <- cov(df[,col1], df[,col2])
+  correl <- cor(df[,col1], df[,col2])
+  return(list(variables = c(var1, var2), covarianza = covar, correlacion = correl))
+}
+
+df<-data.frame(w=c(-9:0),x=c(1:10), y=c(11:20), z=c(21:30))
+
+cal.cov.cor(df,2,3)
+```
+
+
+
+# ====================================================
+## Ejercicio 22 Importe directamente desde Excel en R el archivo EjemploAlgoritmosRecomendaci´on.xlsx el cual contiene los promedios de evaluaci´on de 100 personas que adquirieron los mismos productos o muy similares en la tienda AMAZON. Luego ejecute un str(...) y un summary(...) con esta tabla de datos 
+```{r}
+#install.packages("readxl")
+library(readxl)
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+Datos <- read_xlsx('EjemploAlgoritmosRecomendacion.xlsx')
+
+summary(Datos)
+str(Datos)
+```
+
+
+# ====================================================
+## Ejercicio 23
+```{r}
+U<-function(n){
+  if(n==0) return(5)
+  if(n==1) return(-5)
+  if(n==2) return (2)
+  else return(4*U(N-1) - 15*U(n-2)+U(n-3))
+}
+U(2)
+```
+
+
+
+# ====================================================
+## Ejercicio 24
+```{r}
+funcion <- function(x, n) {
+  if (n == 0) {
+    return(1)
+  } else if (n == 1) {
+    return(x)
+  } else if (n > 1) {
+    return(x * funcion(x, n-1))
+  }
+}
+
+funcion(2,5)
+```
+
+
+
+# ====================================================
+## Ejercicio 25
+```{r}
+#install.packages("tidyr")
+#library(tidyr)
+
+
+#setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 1/DatosTarea1")
+#datos <- read.csv("bosques_energia.csv", header = TRUE)
+
+
+
+#datos_tidy <- gather(datos, mes, valor, -nombre)
+```
+
+
+
+
+

@@ -1,0 +1,400 @@
+---
+title: "Tarea10_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-05-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+```{r}
+calcular_metricas <- function(MC) {
+  
+  VN <- MC[1,1]  
+  FN <- MC[2,1] 
+  FP <- MC[1,2]  
+  VP <- MC[2,2]  
+  
+  # Calcular las métricas de rendimiento
+  PG <- (VN+VP)/(VN+FP+FN+VP)
+  EG <- 1 - PG
+  PP <- VP/(FN+VP)
+  PN <- VN/(VN+FP)
+  falsos_positivos <- FP/(VN+FP)
+  falsos_negativos <- FN/(FN+VP)
+  AP <- VP/(FP+VP)
+  AN <- VN/(VN+FN)
+  
+  metricas <- list(precision_global = PG,
+                   error_global = EG,
+                   precision_positiva = PP,
+                   precision_negativa = PN,
+                   falsos_positivos = falsos_positivos,
+                   falsos_negativos = falsos_negativos,
+                   asertividad_positiva = AP,
+                   asertividad_negativa = AN)
+  
+  return(metricas)
+}
+```
+
+# Ejercicio #1
+
+### 1.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+taprendizaje <- Datos[-indice, ]
+```
+
+Al usar CreatePartition(), el metodo se asegura de que las 2 particiones queden equilibradas y balanceadas, es decir que los datos sean similares entre ambos lados.
+
+### 1.2
+
+```{r}
+
+tabla.indices <- data.frame()
+
+# nnet
+
+modelo<- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = taprendizaje, size = 2, maxit   = 1000, MaxNWts = 400,trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 2 capas"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+modelo<- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = taprendizaje, size = 4, maxit   = 1000, MaxNWts = 400,trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 4 capas"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+modelo<- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = taprendizaje, size = 20, maxit   = 1000, MaxNWts = 400, trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 20 capas"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+tabla.indices <- select(tabla.indices, Modelo, everything())
+tabla.indices
+
+
+```
+
+Resultado: Podemos ver que dependiendo del numero de capas, el resultado no varia mucho, sin embargo un mejor resultado, se podria obtener probando con diferentes capas, ya que en cada momento que se vuelve a realizar el metodo, la precision puede ser diferente.
+
+### 1.3
+
+```{r}
+modelo <- train.neuralnet(formula       = tipo~homogeneidad,
+                          data          = taprendizaje, 
+                          hidden        = c(6, 4, 3), 
+                          linear.output = FALSE, 
+                          threshold     = 0.1, 
+                          stepmax       = 1e+06)
+# modelo     <- train.neuralnet(formula       = tipo~homogeneidad        ,
+#                               data          = taprendizaje,
+#                              hidden        = c(6, 4, 3),
+#                             linear.output = FALSE,
+#                              threshold     = 0.1,
+#                             stepmax       = 1e+06)
+# 
+# prediccion <- predict(modelo, ttesting, type = "class")
+# head(prediccion$prediction)
+# 
+# prediccion <- predict(modelo, ttesting, type = "class")
+# mc <- confusion.matrix(ttesting, prediccion)
+#  metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+# metricas$Modelo <-"neural net"
+# tabla.indices <- rbind(tabla.indices,metricas)
+# tabla.indices <- select(tabla.indices, Modelo, everything())
+```
+
+### 1.4
+
+```{r}
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(tipo~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("svm-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(tipo~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("knn-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+
+# Definir los kernels que vamos a usar
+kernels <- c("sigmoid","radial","linear","triangular",
+  "epanechnikov","triweight","optimal")
+
+# Generar modelos con diferentes kernels
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+
+
+
+```
+
+Como se puede observar, los mejores resultados estan entre el nnet con 4 capas y el knn-triweight. Para este caso ambas precisiones globales son bastante parecidas y muy buenas.
+
+# Ejercicio 2
+
+### 2.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("titanicV2020.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+
+# Eliminamos las columnas PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked: 
+Datos <- subset(Datos, select = -c(PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked))
+#omitimos nulos
+Datos<-na.omit(Datos)
+
+#recodificamos
+
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+Datos$Survived <- as.factor(Datos$Survived)
+```
+
+### 2.2
+
+```{r}
+tam <- dim(Datos)
+n   <- tam[1]
+muestra      <- sample(1:n, floor(n*0.20))
+ttesting     <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+
+tabla.indices <- data.frame()
+
+# nnet
+
+modelo<- train.nnet(formula = Survived~.,data = taprendizaje, size = 4, maxit   = 1000, MaxNWts = 300,trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+calcular_metricas(mc)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 4 nodos"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+modelo<- train.nnet(formula = Survived~.,data = taprendizaje, size = 15, maxit   = 1000, MaxNWts = 300,trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+calcular_metricas(mc)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 15 nodos"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+modelo<- train.nnet(formula = Survived~.,data = taprendizaje, size = 20, maxit   = 1000, MaxNWts = 300, trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+calcular_metricas(mc)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 20 nodos"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+tabla.indices <- select(tabla.indices, Modelo, everything())
+
+tabla.indices
+```
+
+En este caso, podemos apreciar que el metodo nnet con 20 nodos supera los demas con menos nodos, es decir, es el mejor entre los 3. Con 4 nodos la precision global es aun mas alta que con 15 nodos.
+
+### 2.3
+
+```{r}
+
+str(taprendizaje)
+# modelo<- train.neuralnet(formula = Survived~ Sex + Age + Fare+Pclass,data = taprendizaje,hidden        = c(6, 4, 3), 
+#                               linear.output = FALSE, 
+#                               threshold     = 0.1, 
+#                               stepmax       = 1e+06)
+# prediccion <- predict(modelo, ttesting, type = "class")
+# confusion.matrix(ttesting, prediccion)
+# mc <- confusion.matrix(ttesting, prediccion)
+# metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+# metricas$Modelo <-"nnet 4 nodos"
+# tabla.indices <- rbind(tabla.indices,metricas)
+# 
+# modelo<- train.neuralnet(formula = Survived~.,data = taprendizaje,hidden        = c(6, 4, 3), 
+#                               linear.output = FALSE, 
+#                               threshold     = 0.1, 
+#                               stepmax       = 1e+06)
+# prediccion <- predict(modelo, ttesting, type = "class")
+# confusion.matrix(ttesting, prediccion)
+# mc <- confusion.matrix(ttesting, prediccion)
+# metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+# metricas$Modelo <-"nnet 15 nodos"
+# tabla.indices <- rbind(tabla.indices,metricas)
+# 
+# modelo<- train.neuralnet(formula = Survived~.,data = taprendizaje,hidden        = c(6, 4, 3), 
+#                               linear.output = FALSE, 
+#                               threshold     = 0.1, 
+#                               stepmax       = 1e+06)
+# prediccion <- predict(modelo, ttesting, type = "class")
+# 
+# mc <- confusion.matrix(ttesting, prediccion)
+# metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+# metricas$Modelo <-"nnet 20 nodos"
+# tabla.indices <- rbind(tabla.indices,metricas)
+# 
+# tabla.indices <- select(tabla.indices, Modelo, everything())
+# 
+# tabla.indices
+```
+
+### 2.4
+
+```{r}
+
+
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(Survived~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("svm-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(Survived~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("knn-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+```
+
+Para este caso, si hablamos solo del metodo nnet, el mejor seria en el que utilizamos 20 nodos. Si hablamos de la lista general donde se encuentran metodos de clases pasadas, el mejor seria el metodo SVM, ya que obtiene una mayor precision global, y un menor error global.
+
+# Ejercicio 3
+
+### 3.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 10")
+Datos <- read.table("ZipDataTrainCod.csv", header=TRUE, sep=';',dec='.', stringsAsFactors = T)
+```
+
+### 3.2
+
+```{r}
+
+set.seed(123)
+
+tam<-dim(Datos)
+n<-tam[1]
+muestra <- sample(1:n,floor(n*0.20))
+ttesting <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+
+tabla.indices <- data.frame()
+
+modelo<- train.nnet(formula = Numero~.,data = taprendizaje, size=2, trace=FALSE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"nnet 2 nodos"
+tabla.indices <- rbind(tabla.indices,metricas)
+general.indexes(mc=mc)
+tabla.indices <- select(tabla.indices, Modelo, everything())
+
+```
+
+Como se puede observar, el metodo no deja utilizar mas de 2 nodos, por lo mismo tira o resulta una precision muy baja, lo que hace pensar que el metodo es malo, sin embargo, habria que conocer el resultado con mas nodos.
+
+### 3.3
+
+```{r}
+
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(Numero~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("svm-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(Numero~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("knn-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+```
+
+El mejor metodo seria el knn con el kernel triweight, ya que obtiene mayor precision y menor error global

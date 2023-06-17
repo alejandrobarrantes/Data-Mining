@@ -1,0 +1,264 @@
+---
+title: "Tarea4_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-04-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR") 
+library("factoextra")
+library("cluster")
+library("fmsb")
+mi.tema <- theme_grey() + theme(panel.border = element_rect(fill = NA,color = "white"), plot.title = element_text(hjust = 0.5))
+centroide <- function(num.cluster, datos, clusters) {
+  ind <- (clusters == num.cluster)
+  return(colMeans(datos[ind,]))
+}
+
+```
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 4/DatosTarea")
+Datos <- read.csv('EjemploAlgoritmosRecomendacion.csv', header=TRUE, sep=';',dec=',',row.names=1)
+```
+
+
+### a.1) Ejecute un Clustering Jerarquico con la distancia euclıdea y la agregacion del Salto Maximo, Salto Mınimo, Promedio y Ward. Guarde la tabla de datos en el archivo AlgoritmosRecomendacion2.csv con el cluster al que pertenece cada individuo para el caso de la agregacion de Ward usando 2 clusteres.
+### a.2) Salto Maximo
+```{r}
+modelo <- hclust(dist(Datos),method = "complete")
+plot(modelo)
+
+```
+
+### a.3) Salto Mınimo
+```{r}
+modelo <- hclust(dist(Datos),method = "single")
+plot(modelo)
+```
+
+### a.4) Promedio
+```{r}
+modelo <- hclust(dist(Datos),method = "average")
+plot(modelo)
+```
+
+###  a.5) Ward
+```{r}
+modelo <- hclust(dist(Datos),method= "ward.D")
+plot(modelo)
+```
+
+### a.6) Guarde la tabla de datos en el archivo AlgoritmosRecomendacion2.csv con el cluster al que pertenece cada individuo para el caso de la agregacion de Ward usando 2 clusteres
+```{r}
+Grupo<-cutree(modelo,k=2)
+NDatos<-cbind(Datos,Grupo)
+write.csv(NDatos,"EjemploAlgoritmosRecomendacion2.csv")
+```
+
+
+## b) “Corte” el arbol anterior usando 2 clusteres y la agregacion de Ward, interprete los resultados usando interpretacion usando graficos de barras (Horizontal-Vertical) y usando graficos tipo Radar.
+
+### 1.b) “Corte” el arbol anterior usando 2 clusteres y la agregacion de Ward, interprete los resultados usando interpretacion usando graficos de barras (Horizontal-Vertical) y usando graficos tipo Radar
+
+```{r}
+modelo <- hclust(dist(Datos),method= "ward.D")
+grupos <- cutree(modelo, k=2)
+NDatos<-cbind(Datos,grupos)
+
+centro.cluster1<-centroide(1,(Datos),(grupos))
+centro.cluster2<-centroide(2,(Datos),(grupos))
+centros<-rbind(centro.cluster1,centro.cluster2)
+
+maximos<-apply(centros,2,max)
+minimos<-apply(centros,2,min)
+centros<-rbind(minimos,centros)
+centros<-rbind(maximos,centros)
+
+color <- c("#ECD078","#D95B43","#C02942","#542437","#53777A")
+
+
+radarchart(as.data.frame(centros),maxmin=TRUE,axistype=4,axislabcol="slategray4",
+           centerzero=FALSE,seg=8, cglcol="gray67",
+           pcol=color,plty=1,plwd=5,title="Comparación de clústeres")
+
+legenda <-legend(1.5,1, legend=c("Cluster 1","Cluster 2"),
+                 seg.len=-1.4,title="Clústeres",pch=21,bty="n" ,lwd=3, y.intersp=1, 
+                 horiz=FALSE,col=color)
+
+barplot(centros[1,],col=color,las=2, cex.names = 0.8, ylim = c(0,10))
+
+barplot(centros[2,],col=color,las=2, cex.names = 0.8, ylim = c(0,10))
+```
+
+### En el grafico tipo radar podemos notar como hay un cluster que le dio bastante valoracion a todas las variables menos al tamannio del paquete, mientras que en el cluster 2, los clientes calificaron mas alto el tamannio del paquete. Mientras que en los graficos de barras podemos observar que ambos clusteres clasificaron de forma parecida, sin embargo, en el cluster #2 las calificaciones fueron mas bajas en todas las variables, solamente durabilidad y tamannio del paquete se mantienen muy similares
+
+
+
+## 1.c) Si se tienen 4 clusteres usando agregacion de Ward ¿Que productos recomendarıa a Teresa, a Leo y a Justin?, es decir, ¿los productos que compra cual otro cliente? Usando distancia euclıdea ¿cual es la mejor recomendacion de compra que le podemos hacer a Teresa, a Leo y a Justin?
+
+```{r}
+modelo <- hclust(dist(Datos),method= "ward.D")
+grupos <- cutree(modelo, k=4)
+NDatos<-cbind(Datos,grupos)
+
+grupo.teresa<-NDatos["Teresa",]$grupos
+grupo.leo<-NDatos["Leo",]$grupos
+grupo.justin<-NDatos["Justin",]$grupos
+```
+#### Recomendaciones para Teresa: Comprar los productos que compran
+```{r}
+row.names(NDatos[NDatos$grupos==grupo.teresa,])
+```
+#### Recomendaciones para Leo: Comprar los productos que compran
+```{r}
+row.names(NDatos[NDatos$grupos==grupo.leo,])
+```
+#### Recomendaciones para Justin: Comprar los productos que compran
+```{r}
+row.names(NDatos[NDatos$grupos==grupo.justin,])
+```
+
+
+## 1.d) Construya un clustering jerarquico sobre las componentes principales del ACP.
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 4/DatosTarea")
+Datos <- read.csv('EjemploAlgoritmosRecomendacion.csv', header=TRUE, sep=';',dec=',',row.names=1)
+res  <- PCA(Datos , scale.unit=TRUE, ncp=5, graph = FALSE)
+res.hcpc <- HCPC(res, nb.clust = -1, consol = TRUE, min = 2, max = 2, graph = FALSE)
+
+fviz_cluster(res.hcpc,repel = TRUE,show.clust.cent = TRUE,palette = "jco",main = "Factor map",geom = "text", select.ind = list(cos2 = 0.1))
+```
+
+
+# EJERCICIO 2
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 4/DatosTarea")
+Datos <- read.csv("VotosCongresoUS.csv",header=TRUE, sep=",", dec=".")
+Datos<-as.data.frame(lapply((Datos), factor))
+```
+
+## a) Ejecute una clasificacion jerarquica sobre esta tabla de datos usando la funcion daisy ya que los datos son cualitativos. Use metrica euclidean y metodo complete (deje el resultado en la variable jer). Cargue los datos con la siguiente instruccion:
+
+```{r}
+D<-daisy((Datos), metric = "euclidean")
+jer<-hclust(D, method = "complete")
+```
+
+## b) Luego “corte” el arbol usando 3 clusteres y ejecute el siguiente codigo
+
+```{r}
+grupo<-cutree(jer, k = 3)
+NDatos<-cbind((Datos),grupo)
+
+cluster<-NDatos$grupo
+sel.cluster1<-match(cluster,c(1),0)
+Datos.Cluster1<-NDatos[sel.cluster1>0,]
+dim(Datos.Cluster1)
+sel.cluster2<-match(cluster,c(2),0)
+Datos.Cluster2<-NDatos[sel.cluster2>0,]
+dim(Datos.Cluster2)
+sel.cluster3<-match(cluster,c(3),0)
+Datos.Cluster3<-NDatos[sel.cluster3>0,]
+dim(Datos.Cluster3)
+
+```
+
+### Explique que hace el codigo anterior. Luego ejecute el siguiente codigo:
+#### grupo<-cutree(jer, k = 3): Se realiza un análisis de cluster utilizando la función cutree() con un objeto de clustering previamente generado (jer) y se especifica k=3 para indicar que se desea dividir los datos en tres grupos.
+
+#### NDatos<-cbind(Datos,grupo): Se crea un nuevo objeto llamado NDatos que es una combinación de los datos originales (Datos) y la variable de cluster generada en el paso anterior (grupo). La función cbind() combina las dos matrices por columnas.
+
+#### cluster<-NDatos$grupo: Se crea un objeto llamado cluster que contiene únicamente la variable de cluster (grupo) de NDatos.
+
+#### sel.cluster1<-match(cluster,c(1),0): Se crea un objeto llamado sel.cluster1 que selecciona todas las filas de NDatos que pertenecen al cluster 1. La función match() devuelve una correspondencia de los elementos de cluster con el valor 1, y el valor 0 para aquellos que no lo son.
+
+#### Datos.Cluster1<-NDatos[sel.cluster1>0,]: Se crea un nuevo objeto de datos llamado Datos.Cluster1 que contiene únicamente las filas de NDatos que pertenecen al cluster 1. La selección se realiza mediante un subíndice que toma las filas donde sel.cluster1 es mayor que cero (es decir, las que pertenecen al cluster 1).
+
+#### dim(Datos.Cluster1): La función dim() devuelve las dimensiones (número de filas y columnas) de Datos.Cluster1. Este comando se repite para los otros dos grupos (Datos.Cluster2 y Datos.Cluster3).
+
+```{r}
+plot(Datos$Party,col=c(4,6),las=2,main="Party",xlab="Todos los Datos")
+plot(Datos.Cluster1$Party,col=c(4,6),las=2,main="Party",xlab="Cluster-1")
+plot(Datos.Cluster2$Party,col=c(4,6),las=2,main="Party",xlab="Cluster-2")
+plot(Datos.Cluster3$Party,col=c(4,6),las=2,main="party",xlab="Cluster-3")
+
+```
+
+
+* Con ayuda de los graficos anteriores y tomando en cuenta el tamano de cada cluster interprete los 3 clusteres formados.
+  + Cluster #1: En el 1er cluster la mayoria de las personas son del partido republicano, alrededor de 170 son republicanos y alrededor de 70 son democratas 
+  + Cluster #2: En el 2do cluster la totalidad de las personas son del partido democrata,
+  + Cluster #3: En el 3er cluster son solo 5 personas en total, alrededor de 3 son republicanos y alrededor de 2 son democratas
+
+
+# EJERCICIO 3
+## Realice un analisis similar al del ejercicio anterior con la tabla de datos CompraBicicletas.csv
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 4/DatosTarea")
+Datos <- read.csv("CompraBicicletas.csv",header=TRUE, sep=";", dec=".")
+variables.cualitativas <- sapply(Datos, is.character)
+Datos[variables.cualitativas] <- as.data.frame(lapply(Datos[variables.cualitativas], factor))
+D<-daisy(as.data.frame(Datos), metric = "euclidean")
+jer<-hclust(D, method = "complete")
+grupo<-cutree(jer, k = 3)
+NDatos<-cbind((Datos),grupo)
+dim(NDatos)
+cluster<-NDatos$grupo
+sel.cluster1<-match(cluster,c(1),0)
+Datos.Cluster1<-NDatos[sel.cluster1>0,]
+dim(Datos.Cluster1)
+sel.cluster2<-match(cluster,c(2),0)
+Datos.Cluster2<-NDatos[sel.cluster2>0,]
+dim(Datos.Cluster2)
+sel.cluster3<-match(cluster,c(3),0)
+Datos.Cluster3<-NDatos[sel.cluster3>0,]
+dim(Datos.Cluster3)
+color <- c("#ECD078","#D95B43","#C02942","#542437","#53777A")
+plot(Datos$PurchasedBike,col=color,las=2,main="PurchasedBike",xlab="Todos los Datos")
+plot(Datos.Cluster1$PurchasedBike,col=c(4,6,7,8,9),las=2,main="PurchasedBike",xlab="Cluster-1")
+plot(Datos.Cluster2$PurchasedBike,col=color,las=2,main="PurchasedBike",xlab="Cluster-2")
+plot(Datos.Cluster3$PurchasedBike,col=color,las=2,main="PurchasedBike",xlab="Cluster-3")
+
+```
+
+* Con ayuda de los graficos anteriores y tomando en cuenta el tamano de cada cluster interprete los 3 clusteres formados, utilizaremos la variable de purchased bike, la cual nos informa si la persona termino comprando la bicicleta o no.
+  + Cluster #1: En el 1er cluster la mayoria de las personas no compraron la bicicleta, alrededor de 270 la compraron y alrededor de 240 no la compraron. Es un cluster bastante grande, de alrededor de 510 personas.
+  + Cluster #2: En el 1er cluster la mayoria de las personas no compraron la bicicleta tampoco, alrededor de 57 la compraron y alrededor de 65 no la compraron. Es un cluster de tamanio mediano, de alrededor de 122 personas.
+  + Cluster #3: En el 1er cluster la mayoria de las personas no compraron la bicicleta tampoco, alrededor de 170 la compraron y alrededor de 180 no la compraron. Es un cluster grande, de alrededor de 300 personas.
+
+
+
+# 4. (10 puntos) Dada la siguiente matriz de disimilitudes entre cuatro individuos A1, A2, A3 y A4, construya “a mano” una Jerarquıa Binaria usando la agregacion del Salto Maximo y del Promedio, dibuje el dendograma en ambos casos:
+
+```{r}
+matriz<- matrix(c(0,5,2,3,5,0,1,7,7,1,0,6,3,7,6,0), nrow = 4,dimnames = list(c("A1", "A2", "A3","A4"), c("A1", "A2", "A3","A4")))
+matriz<-as.dist(matriz)
+matriz
+```
+
+#### Para aplicar el salto maximo Podemos ver que el primer valor mayor es 7, corresponde a la posicion (A4,A2), por tanto estos dos van a ser los primeros ejes. Los separamos en 2, en el dendongrama se coloca esta union partiendo desde el valor 7, ya que es el valor maximo, luego la union entre el A1 y A4 se encontraria en el valor de 3, mientras que la union de A2 y A3 se encontraria en el valor 1, como se aprecia en la matriz.
+
+![Salto Maximo!](DatosTarea/complete.png)
+
+#### Salto Promedio: Promedaimos el valor de cada fila con cada columna, es decir todas contra todas, y luego hacemos algo muy parecido al ejemplo anterior, extraemos los mayores, en este caso el promedio mayor va a ser el que queda en la posicion (A4,A2), desde ahi se parte, y ya que los promedios seran mas grandes dependiendo de los numeros con los que se calculen, el dendongrama va a quedar bastante parecido al del salto maximo.
+
+![Salto Promedio!](DatosTarea/average.png)
+
+### Comprobacion:
+```{r}
+mod<-hclust(matriz,method = "complete")
+plot(mod)
+
+mod<-hclust(matriz,method = "average")
+plot(mod)
+```
+
+
+
+
+
+
+

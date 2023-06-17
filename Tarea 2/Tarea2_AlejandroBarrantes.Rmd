@@ -1,0 +1,344 @@
+---
+title: "Tarea1_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-03-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gpairs)
+library(ellipse)
+library(corrplot)
+library(FactoMineR)
+library(car)
+library(GGally)
+library(dplyr)
+```
+# ==========================================================================
+## ERRORES
+```{r}
+RSS <- function(Pred,Real) {
+  ss <- sum((Real-Pred)^2)
+  return(ss)
+}
+
+RSE<-function(Pred,Real,NumPred) {
+  N<-length(Real)-NumPred-1  # <- length(Real)-(NumPred+1)
+  ss<-sqrt((1/N)*RSS(Pred,Real))
+  return(ss)
+}
+
+MSE <- function(Pred,Real) {
+  N<-length(Real)
+  ss<-(1/N)*RSS(Pred,Real)
+  return(ss)
+}
+
+error.relativo <- function(Pred,Real) {
+  ss<-sum(abs(Real-Pred))/sum(abs(Real))
+  return(ss)
+}
+
+```
+# ==========================================================================
+## FUNCIONES
+```{r}
+lower <- function(data, mapping){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_point(size = 1,col = "dodgerblue3") +
+    geom_smooth(method = lm, size = 0.4, color = "red", se = FALSE)
+  return(p)
+}
+
+diag <- function(data, mapping){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_histogram(bins = 30, col = "black", fill = "#F8766D", aes(y=..density..)) +
+    geom_density()
+  return(p)
+}
+
+indices.precision <- function(real, prediccion,cantidad.variables.predictoras) {
+  return(list(error.cuadratico = MSE(prediccion,real),
+              raiz.error.cuadratico = RSE(prediccion,real,cantidad.variables.predictoras),
+              error.relativo = error.relativo(prediccion,real),
+              correlacion = as.numeric(cor(prediccion,real))))
+}
+
+plot.real.prediccion <- function(real, prediccion, modelo = "") {
+  g <- ggplot(data = data.frame(Real = real, Prediccion = as.numeric(prediccion)), mapping = aes(x = Real, y = Prediccion)) +
+    geom_point(size = 1, col = "dodgerblue3") +
+    labs(title = paste0("Real vs Predicción", ifelse(modelo == "", "", paste(", con", modelo))),
+         x = "Real",
+         y = "Predicción")
+  return(g)
+}
+```
+# ==========================================================================
+
+
+# Ejercicio 1
+
+## 1.1 
+### Cargue la tabla de datos en R y asegurese que las variables se estan leyendo de forma correcta. ¿Es necesario recodificar variables? Seleccione la variable a predecir, y tome para entrenamiento un 80 % de la tabla de datos.
+```{r}
+
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 2/Datos_EjemplosClase_Tarea")
+datos <- read.table('DeudaCredito.csv',header=TRUE, sep=',',dec='.')
+
+datos2<-subset(datos, select = -c(X,Estudiante,Genero,Casado,Etnicidad))
+
+indices.training <- sample(nrow(datos2), nrow(datos2)*0.8)
+datos.training <- datos2[indices.training, ]
+
+indices.testing <- sample(nrow(datos2), nrow(datos2)*0.2)
+datos.testing <- datos2[indices.testing, ]
+```
+### Seleccione la variable a predecir: Balance
+
+## 1.2 
+### Realice un Analisis Exploratorio de los datos con todos los datos que incluya al menos:
+
+### 1.2.1 summary(...) y str()
+```{r}
+summary(datos2)
+str(datos2)
+```
+
+### 1.2.2 La matriz de correlaciones y alguno de sus graficos. Interprete al menos dos correlaciones.
+```{r}
+matriz.correlacion<-cor(datos2)
+corrplot(matriz.correlacion)
+print("-----")
+```
+### 1. Limite - Balance: Se puede notar como el balance tiene una gran correlacion respecto al limite, ya que su correlacion alcanza un numero alejado de 0
+### 2. CalifCredit - Balance: Se puede notar tambien como el balance tiene una gran correlacion respecto al CalifCred, ya que su correlacion alcanza un numero alejado de 0. Es decir, si una baja, la otra tambien lo hara
+
+
+### 1.2.3 Atipicos
+```{r}
+atipicos<-Boxplot(datos2,data=datos2,id.method="y",col="Blue")
+atipicos
+```
+
+## 1.3 La variable numerica que parece mejor para predecir la deuda en la tarjeta de credito es la variable
+#### Limite, ya que es con la que tiene mas correlacion con el balance
+
+
+## 1.4 Genere un modelo de regresion lineal multiple incluyendo las todas las variables predictoras
+
+```{r}
+numero.predictoras <- dim(datos2)[2] 
+modelo.lm<-lm(Balance~.,data=datos.training)
+```
+### ¿Cuales coeficientes obtiene para los β?
+```{r}
+#Coeficientes para Beta
+modelo.lm$coefficients
+```
+
+### De una interpretacion de 3 de los coeficientes que se obtienen en el modelo
+#### 1. Educacion: La Educacion da un valor absoluto muy bajo hasta menor, ya que tiene muy poco impacto en la variable a predecir, es decir, ademas de que no tiene mucha correlacion
+#### 2. Ingreso: Se podria decir que el Ingreso tiene un gran valor absoluto, por lo tanto tiene un gran impacto en el balance
+#### 3. Edad: La edad tiene un coeficiente muy bajo, por tanto la deuda varia muy poco dependiendo de la edad de la persona
+
+### ¿Cual variable parece tener mas impacto sobre la variable a predecir y por que?
+#### La variable que parece tener mas impacto es Ingreso, ya que con ella tiene el valor absoluto mas grande,lo cual sugiere que es una variable importante o con impacto en la variable a predecir
+
+## 1.5 ¿Que error se obtiene sobre la tabla de testing para el modelo de regresion lineal? Interprete las medidas de error obtenidas.
+
+```{r}
+prediccion <- predict(modelo.lm, datos.testing)
+pre.lm <- indices.precision(datos.testing$Balance, prediccion,dim(datos.training)[2])
+pre.lm
+```
+#### En el error cuadratico puede haber una diferencia de 20645.21 dolares entre la prediccion y la realidad
+#### El error relativo debe ser interpretado por un bancario, pero por encima se podria deducir que habria un margen de 0,23 dolares de error en el balance de cada cliente  
+#### La correlacion (0.9471656), sifnifica que hay buena posibilidad de que el modelo acierte en los resultados de la prediccion
+
+## 1.6 Si tuviera que eliminar alguna o algunas de las variables con la esperanza de que mejore la prediccion ¿Cual o cuales de las variables eliminarıa? ¿El nuevo modelo mejora la prediccion?
+#### Eliminaria la cantidad de tarjetas y la educacion, ya que estas variables no dependen mucho o afectan mucho al balance. La prediccion no tendria un resultado mejor, pero si muy cercano
+
+```{r}
+modelo_optimo <- step(modelo.lm, direction = "backward")
+summary(modelo_optimo)
+
+nuevo.modelo.lm<-lm(Balance~Ingreso+CalifCredit+Edad,data=datos.training)
+summary(nuevo.modelo.lm)
+
+prediccion <- predict(nuevo.modelo.lm, datos.testing)
+pre.lm <- indices.precision(datos.testing$Balance, prediccion,3)
+pre.lm
+```
+
+
+# ==========================================================================
+
+# Ejercicio 2
+
+## 2.1 
+
+```{r}
+ setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 2/Datos_EjemplosClase_Tarea")
+datos <- read.table('AsientosNinno.csv',header=TRUE, sep=';',dec='.')
+
+datos$CalidadEstant <- as.numeric(factor(datos$CalidadEstant, levels = c("Bueno","Medio","Malo"),labels=c(1,2,3))) #Recodifico CalidadEstant
+datos2<-datos[,-1]# quito X
+set.seed(123)
+indices.training <- sample(nrow(datos2), nrow(datos2)*0.85)
+datos.training <- datos2[indices.training, ]
+
+indices.testing <- sample(nrow(datos2), nrow(datos2)*0.15)
+datos.testing <- datos2[indices.testing, ]
+
+#Variable a predecir = Ventas
+```
+
+## 2.2
+### 2.2.1 summary(...).
+```{r}
+summary(datos2)
+str(datos2)
+```
+
+### 2.2.2  La matriz de correlaciones y alguno de sus graficos.
+
+```{r}
+matriz.correlacion<-cor(datos2)
+corrplot(matriz.correlacion)
+print("-----")
+```
+
+###  Interprete al menos dos correlaciones.
+#### Publicidad y USA: La publicidad aumenta si el pais es USA, es decir, existe correlacion entre ambas 
+#### PrecioCompt y precio: Obviamente, si el precio de la competencia varia, tambien debe variar nuestro precio, por tanto, en la matriz se observa una buena correlacion entre estas 2
+
+### 2.2.3
+### Atipicos
+```{r}
+atipicos<-Boxplot(datos.training,data=datos.training,id.method="y",col="Blue")
+atipicos
+```
+
+## 2.3 Aplique el modelo de regresion lineal multiple incluyendo todas las variables predictoras
+
+```{r}
+modelo.lm<-lm(Ventas~.,data=datos.training)
+```
+
+## 2.4 ¿Que error se obtiene sobre la tabla de training para el modelo generado anteriormente?
+```{r}
+prediccion <- predict(modelo.lm, datos.training)
+numero.predictoras <- dim(datos.training)[2]
+pre.lm <- indices.precision(datos.training$Ventas, prediccion,numero.predictoras)
+pre.lm
+
+```
+
+# ==========================================================================
+
+# Ejercicio 3
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 2/Datos_EjemplosClase_Tarea")
+datos <- read.table('uscrime.csv',header=TRUE, sep=',',dec='.')
+
+indices.training <- sample(nrow(datos), nrow(datos)*0.67)
+datos.training <- datos[indices.training, ]
+
+indices.testing <- sample(nrow(datos), nrow(datos)*0.33)
+datos.testing <- datos[indices.testing, ]
+```
+
+## 3.1 Realice un Analisis Exploratorio de los datos con todos los datos.
+```{r}
+summary(datos)
+str(datos)
+matriz.correlacion<-cor(datos)
+corrplot(matriz.correlacion)
+atipicos<-Boxplot(datos,data=datos,id.method="y",col="Blue")
+atipicos
+```
+## 3.2
+### 3.2.1 Construya un modelo predictivo para la variable ViolentCrimesPerPop usando una Regresion Lineal Multiple con la funcion lm(...) en la Tabla de Aprendizaje, calcule Error Estandar de los Residuos para este modelo.
+```{r}
+modelo.lm<-lm(ViolentCrimesPerPop~.,data=datos.training)
+summary(modelo.lm)$sigma
+```
+
+### 3.2.2  Ademas calcule el Error Cuadratico Medio y el Error Relativo para la Tabla de Testing.
+
+```{r}
+prediccion <- predict(modelo.lm, datos.testing)
+numero.predictoras <- dim(datos.testing)[2]
+
+pre.lm <- indices.precision(datos.testing$ViolentCrimesPerPop, prediccion,numero.predictoras)
+print(cat("Error cuadratico medio: ",pre.lm$error.cuadratico))
+print(cat("Error relativo: ",pre.lm$error.relativo))
+
+```
+
+# ==========================================================
+# OPTATIVA
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 2/Datos_EjemplosClase_Tarea")
+datos <- read.table('uscrime.csv',header=TRUE, sep=',',dec='.')
+
+
+lm2 <- function(data) {
+  x <- as.matrix(data[, -ncol(data)])
+  y <- as.matrix(data[, ncol(data)])
+  
+  # Calcular los coeficientes de la regresión
+  beta <- (solve( (t(x)%*%x) ) %*% (t(x) %*% y))
+  
+  # Crear un modelo con los coeficientes calculados
+  model <- lm(y ~ x - 1, data = data.frame(cbind(x, y)))
+  model$coefficients <- beta
+  
+  return(model)
+}
+
+predict2 <- function(modelo, datos_prueba) {
+  predicciones <- predict(modelo, newdata = datos_prueba)
+  return(predicciones)
+}
+
+modelo.lm<-lm(datos)
+modelo.lm2<-lm2(datos)
+
+summary(modelo.lm)
+summary(modelo.lm2)
+
+prediccion <- predict(modelo.lm, datos)
+numero.predictoras <- dim(datos)[2]
+
+
+pre.lm <- indices.precision(datos$ViolentCrimesPerPop, prediccion,numero.predictoras)
+pre.lm
+
+prediccion2 <- predict2(modelo.lm2, datos)
+numero.predictoras <- dim(datos)[2]
+
+pre.lm2 <- indices.precision(datos$ViolentCrimesPerPop, prediccion2,numero.predictoras)
+pre.lm2
+
+system.time(lm(datos), gcFirst = TRUE)
+system.time(lm2(datos), gcFirst = TRUE)
+
+system.time(predict(modelo.lm, datos), gcFirst = TRUE)
+system.time(predict2(modelo.lm2, datos), gcFirst = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+

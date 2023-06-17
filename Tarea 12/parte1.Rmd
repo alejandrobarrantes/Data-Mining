@@ -1,0 +1,428 @@
+---
+title: "parte1"
+author: "Alejandro Barrantes Castro"
+date: "2023-06-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(snow)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+# Funciones Generales
+
+```{r funciones}
+precision<-function(clase){
+  function(mc){
+    indices=general.indexes(mc=mc)
+    indices$category.accuracy[clase]
+  }
+}
+
+precision.global<-function(x) sum(diag(x))/sum(x)
+
+error.global <- function(x) 1 - sum(diag(x))/sum(x)
+```
+
+# Ejercicio #1
+
+# Lectura de Datos
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+```
+
+# 1.1 Deteccion de 1's
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+# Constructor del cluster
+clusterExport(clp, "Datos")
+
+ignore <- clusterEvalQ(clp, {
+  library(traineR)
+  
+  ejecutar.prediccion <- function(datos, formula, muestra,metodo, ...) {
+    ttesting <- datos[muestra, ]
+    taprendizaje <- datos[-muestra, ]
+    modelo <- metodo(formula, data = taprendizaje, ...)
+    prediccion <- predict(modelo, ttesting, type = "class")
+    MC <- confusion.matrix(ttesting, prediccion)
+    return(MC)
+  }
+  return(NULL)
+})
+
+numero.filas <- nrow(Datos)
+cantidad.grupos <- 10
+cantidad.validacion.cruzada <- 5
+algoritmos <- c("discrete", "real", "gentle")
+
+deteccion.si.discrete <- c()
+deteccion.si.real <- c()
+deteccion.si.gentle <- c()
+
+# Para medir el tiempo de ejecución
+tiempo.paralelo <- Sys.time()
+
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  si.discrete <- 0
+  si.real <- 0
+  si.gentle <- 0
+  
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    
+    ### Inserta estas 1 variable en cada peón
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, algoritmos, function(pmetodo) {
+      MC <- ejecutar.prediccion(Datos, tipo ~ .,muestra, train.ada , type = pmetodo, iter=80, nu=1)
+      si.val <- MC[2, 2]
+      valores <- list(Tipo = pmetodo, Resultado = si.val)
+      valores
+    })
+    
+    for (j in 1:length(algoritmos)) {
+      if (resultado[[j]][[1]] == "discrete") 
+        si.discrete <- si.discrete + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "real")
+        si.real <- si.real + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "gentle")
+        si.gentle <- si.gentle + resultado[[j]][[2]] 
+    }
+  }
+  
+  deteccion.si.discrete[i] <- si.discrete
+  deteccion.si.real[i] <- si.real
+  deteccion.si.gentle[i] <- si.gentle
+}
+
+stopCluster(clp) # No olvidar cerrar el proceso
+
+# GRAFICACION
+resultados <- data.frame("discrete"     = deteccion.si.discrete,
+                         "real"     = deteccion.si.real,
+                         "gentle" = deteccion.si.gentle) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Detección de los 1's detectados", 
+        xlab = "Número de iteración",
+        ylab = "Cantidad de 1's detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+#### Para este caso, el mejor metodo ha sido 'gentle', sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, cuesta un poco determinar cual ha sido el mejor
+
+# 1.2 Promediar Error Global
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+# Constructor del cluster
+clusterExport(clp, "Datos")
+
+ignore <- clusterEvalQ(clp, {
+  library(traineR)
+  
+  ejecutar.prediccion <- function(datos, formula, muestra,metodo, ...) {
+    ttesting <- datos[muestra, ]
+    taprendizaje <- datos[-muestra, ]
+    modelo <- metodo(formula, data = taprendizaje, ...)
+    prediccion <- predict(modelo, ttesting, type = "class")
+    MC <- confusion.matrix(ttesting, prediccion)
+    return(MC)
+  }
+  return(NULL)
+})
+
+numero.filas <- nrow(Datos)
+cantidad.grupos <- 10
+cantidad.validacion.cruzada <- 5
+algoritmos <- c("discrete", "real", "gentle")
+
+deteccion.error.discrete <- c()
+deteccion.error.real <- c()
+deteccion.error.gentle <- c()
+
+# Para medir el tiempo de ejecución
+tiempo.paralelo <- Sys.time()
+
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  error.discrete <- 0
+  error.real <- 0
+  error.gentle <- 0
+  
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    
+    ### Inserta estas 1 variable en cada peón
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, algoritmos, function(pmetodo) {
+      MC <- ejecutar.prediccion(Datos, tipo ~ .,muestra, train.ada , type = pmetodo, iter=80, nu=1)
+      error.metodo <- (1-(sum(diag(MC)))/sum(MC))*100
+      valores <- list(Tipo = pmetodo, Error = error.metodo)
+      valores
+    })
+    
+    for (j in 1:length(algoritmos)) {
+      if (resultado[[j]][[1]] == "discrete") 
+        error.discrete <- error.discrete + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "real")
+        error.real <- error.real + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "gentle")
+        error.gentle <- error.gentle + resultado[[j]][[2]] 
+    }
+  }
+  
+  deteccion.error.discrete[i] <- error.discrete/ cantidad.grupos
+  deteccion.error.real[i] <- error.real/ cantidad.grupos
+  deteccion.error.gentle[i] <- error.gentle/ cantidad.grupos
+}
+
+stopCluster(clp) # No olvidar cerrar el proceso
+
+# GRAFICACION
+resultados <- data.frame("discrete"     = deteccion.error.discrete,
+                         "real"     = deteccion.error.real,
+                         "gentle" = deteccion.error.gentle) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Comparación del Error Global", 
+        xlab = "Número de iteración",
+        ylab = "Porcentaje de Error Global",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+##### El mejor algoritmo a la hora de correr el ejercicio ha sido 'gentle', ya que para este metodo se obtiene una mayor acertacion en los 1's, ademas de que el error global se mantiene bastante bajo, lo que significa que ha sido bastante preciso. Claramente el reultado puede cambiar a la hora de ejecutar el archivo nuevamente. Sin embargo, se debe hacer una tercera vez para corroborar
+
+# 1.3
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+# Constructor del cluster
+clusterExport(clp, "Datos")
+
+ignore <- clusterEvalQ(clp, {
+  library(traineR)
+  
+  ejecutar.prediccion <- function(datos, formula, muestra,metodo, ...) {
+    ttesting <- datos[muestra, ]
+    taprendizaje <- datos[-muestra, ]
+    modelo <- metodo(formula, data = taprendizaje, ...)
+    prediccion <- predict(modelo, ttesting, type = "class")
+    MC <- confusion.matrix(ttesting, prediccion)
+    return(MC)
+  }
+  return(NULL)
+})
+
+numero.filas <- nrow(Datos)
+cantidad.grupos <- 10
+cantidad.validacion.cruzada <- 5
+algoritmos <- c("discrete", "real", "gentle")
+
+MCs.discrete <- list()
+MCs.real <- list()
+MCs.gentle <- list()
+
+# Para medir el tiempo de ejecución
+tiempo.paralelo <- Sys.time()
+
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  MC.discrete <- matrix(c(0,0,0,0), nrow=2)
+  MC.real <- matrix(c(0,0,0,0), nrow=2)
+  MC.gentle <- matrix(c(0,0,0,0), nrow=2)
+  
+  
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    
+    ### Inserta estas 1 variable en cada peón
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, algoritmos, function(pmetodo) {
+      MC <- ejecutar.prediccion(Datos, tipo ~ .,muestra, train.ada , type = pmetodo, iter=80, nu=1)
+      valores <- list(Tipo = pmetodo, MC = MC)
+      valores
+    })
+    
+    for (j in 1:length(algoritmos)) {
+      if (resultado[[j]][[1]] == "discrete") 
+        MC.discrete <- MC.discrete + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "real")
+        MC.real <- MC.real + resultado[[j]][[2]] 
+      else if (resultado[[j]][[1]] == "gentle")
+        MC.gentle <- MC.gentle + resultado[[j]][[2]] 
+    }
+  }
+  
+  MCs.discrete[[i]] <- MC.discrete
+  MCs.real[[i]] <- MC.real
+  MCs.gentle[[i]] <- MC.gentle
+}
+
+stopCluster(clp) # No olvidar cerrar el proceso
+
+
+# GRAFICACION 1's
+resultados <- data.frame("discrete"     = sapply(MCs.discrete,precision("1")),
+                         "real"     = sapply(MCs.real,precision("1")),
+                         "gentle" = sapply(MCs.gentle,precision("1"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de 1's detectados",main = "Comparacion de porcentaje de 1's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+#========================================
+
+# GRAFICACION 0's
+resultados <- data.frame("discrete"     = sapply(MCs.discrete,precision("0")),
+                         "real"     = sapply(MCs.real,precision("0")),
+                         "gentle" = sapply(MCs.gentle,precision("0"))) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de 0's detectados",main = "Comparacion de porcentaje de 0's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+#==========================================
+
+# GRAFICACION Error global
+resultados.error <- data.frame("discrete"     = sapply(MCs.discrete,error.global),
+                           "real"     = sapply(MCs.real,error.global),
+                           "gentle" = sapply(MCs.gentle,error.global)) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados.error),beside = TRUE,ylim = c(0, max(resultados.error)),names.arg = 1:nrow(resultados.error),xlab ="Numero de iteracion",ylab = "Porcentaje de Error Global",main = "Comparacion de Error Global",col = rainbow(ncol(resultados.error)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados.error),fill = rainbow(ncol(resultados.error)),border = NA)
+```
+
+##### Segun el grafico promediando los valores de 1's, 0's y error global, el mejor a la hora de compilado seria gentle. Tiene mas deteccion de 1's y 0's, ademas de que tiene el error mas bajo.
+
+```{r}
+# GRAFICACION 0's
+resultados <- data.frame("discrete"     = sapply(MCs.discrete,precision("0")),
+                         "real"     = sapply(MCs.real,precision("0")),
+                         "gentle" = sapply(MCs.gentle,precision("0"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(
+  t(resultados),
+  beside = TRUE,
+  ylim = c(0, 1),
+  names.arg = 1:nrow(resultados),
+  xlab = "Numero de iteracion",
+  ylab = "Porcentaje de 0's detectados",
+  main = "Comparacion de porcentaje de 0's detectados",
+  col = rainbow(ncol(resultados))
+)
+
+# Agregar la leyenda
+legend(
+  "topright",
+  legend = colnames(resultados),
+  fill = rainbow(ncol(resultados)),
+  border = NA
+)
+```
+
+```{r}
+# GRAFICACION 1's
+resultados <- data.frame("discrete"     = sapply(MCs.discrete,precision("1")),
+                         "real"     = sapply(MCs.real,precision("1")),
+                         "gentle" = sapply(MCs.gentle,precision("1"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(
+  t(resultados),
+  beside = TRUE,
+  ylim = c(0, max(resultados)),
+  names.arg = 1:nrow(resultados),
+  xlab = "Numero de iteracion",
+  ylab = "Porcentaje de 1's detectados",
+  main = "Comparacion de porcentaje de 1's detectados",
+  col = rainbow(ncol(resultados))
+)
+
+# Agregar la leyenda
+legend(
+  "topright",
+  legend = colnames(resultados),
+  fill = rainbow(ncol(resultados)),
+  border = NA
+)
+```
+
+```{r}
+# GRAFICACION Error global
+resultados <- data.frame("discrete"     = sapply(MCs.discrete,error.global),
+                         "real"     = sapply(MCs.real,error.global),
+                         "gentle" = sapply(MCs.gentle,error.global)) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, max(resultados)),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de Error Global",main = "Comparacion de Error Global",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+# 1.4
+
+#### Yo utilizaria el metodo 'gentle', debido a lo explicado en la conclusion del ejercicio 2.2 y a que podemos observar que es el que tiene mejores resultados a la hora de compilado.

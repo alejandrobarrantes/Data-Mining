@@ -1,0 +1,1096 @@
+---
+title: "Tarea11_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-05-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+```{r Leyendo CSV}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+ttraining <- Datos[-indice, ]
+str(Datos)
+
+```
+
+# EJERCICIO 1
+
+## 1.1
+
+```{r ej1.1}
+str(Datos)
+summary(Datos)
+dim(Datos)
+```
+
+## 1.2
+
+```{r ej1.2}
+## Ejercicio 1.2
+
+v.error.tt<-rep(0,5)
+
+for(i in 1:5) {
+  muestra <- createDataPartition(Datos$tipo, times=1, p=0.25, list=FALSE)
+  ttesting <- Datos[muestra, ]
+  ttraining <- Datos[-muestra, ]
+  
+  modelo <- train.knn(tipo~.,data=ttraining,kmax=50)
+  
+  prediccion <- predict(modelo,ttesting,type = "class")
+  
+  MC <- confusion.matrix(ttesting, prediccion)
+
+  acierto<-sum(diag(MC))/sum(MC)
+  error <- 1- acierto
+  v.error.tt[i] <- error
+}  
+plot(v.error.tt,col="red",type="b",main="Variación del Error",xlab="Número de iteración",ylab="Estimación del Error")
+
+```
+
+## 1.3
+
+```{r ej1.3}
+## Ejercicio 1.3
+
+n <- dim(Datos)[1] # Aquí n=150
+## Vamos a generar el modelo dejando un grupo para testing y los demás datos para aprendizaje.
+v.error.kg<-rep(0,5)
+# Hacemos validación cruzada 10 veces para ver que el error se estabiliza
+for(i in 1:5) {
+  errori <- 0
+  # Esta instrucción genera los k=5 grupos (Folds)
+  grupos <- createFolds(1:n,10) # grupos$Fold0i es el i-ésimo grupo  
+  # Este ciclo es el que hace "cross-validation" (validación cruzada) con 5 grupos (Folds)
+  for(k in 1:10) {    
+      muestra <- grupos[[k]] # Por ser una lista requiere de doble paréntesis
+      ttesting <- Datos[muestra,]
+      ttraining <- Datos[-muestra,]
+      modelo <- train.knn(tipo~.,data=ttraining,kmax=50)
+      prediccion <- predict(modelo,ttesting,type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)  
+      # Porcentaje de buena clasificación y de error
+      acierto<-sum(diag(MC))/sum(MC)
+      error <- 1 - acierto
+      errori <- errori + error
+  } 
+  v.error.kg[i] <- errori/10
+}
+plot(v.error.kg, col = "magenta", type = "b", ylim = c(min(v.error.kg, v.error.tt), max(v.error.kg, 
+    v.error.tt)), main = "Variación del Error", xlab = "Número de iteración", 
+    ylab = "Estimación del Error")
+points(v.error.tt, col = "blue", type = "b")
+legend("topright", legend = c("K-ésimo grupo","Error anterior"), col = c("magenta", 
+    "blue","red","green"), lty = 1, lwd = 1)
+
+```
+
+## 1.4
+
+Gracias al grafico, se puede concluir que el error de knn con k-fold-cross-validation es mucho mas estable y menor. Lo que deja como conclusion que que es mucho mejor utilizar el metodo de fold-cross-validation, es decir, en grupos, donde se pueda utilizar y probar toda la tabla, para asi poder obtener un error mas preciso
+
+# EJERCICIO 2
+
+## 2.1
+
+```{r ej2.1}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+#si's
+deteccion.si.discrete <- c()
+deteccion.si.real <- c()
+deteccion.si.gentle <- c()
+
+#errores
+deteccion.error.discrete <- c()
+deteccion.error.real <- c()
+deteccion.error.gentle <- c()
+
+
+
+
+for(i in 1:cantidad.validacion.cruzada){
+  grupos  <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  si.discrete <- 0
+  si.real <- 0
+  si.gentle <- 0
+  
+  error.discrete <- 0
+  error.real <- 0
+  error.gentle <- 0
+  
+  # Este ciclo es el que hace 'cross-validation' (validación cruzada) con 10
+  # grupos (Folds)
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    ttesting <- Datos[muestra, ]
+    ttraining <- Datos[-muestra, ]
+    
+    #discrete
+    modelo<-train.ada(tipo~.,data=ttraining,iter=80,nu=1,type="discrete")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.discrete <- si.discrete + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.discrete<-error.discrete+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    
+     #real
+    modelo<-train.ada(tipo~.,data=ttraining,iter=80,nu=1,type="real")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.real <- si.real + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.real<-error.real+(1-(sum(diag(MC)))/sum(MC))*100
+    
+     #gentle
+    modelo<-train.ada(tipo~.,data=ttraining,iter=80,nu=1,type="gentle")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.gentle <- si.gentle + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.gentle<-error.gentle+(1-(sum(diag(MC)))/sum(MC))*100
+    
+  }
+  
+  deteccion.si.discrete[i] <- si.discrete
+  deteccion.si.real[i] <- si.real
+  deteccion.si.gentle[i] <- si.gentle
+  
+  #errores
+  
+  deteccion.error.discrete[i] <- error.discrete/cantidad.grupos
+  deteccion.error.real[i] <- error.real/cantidad.grupos
+  deteccion.error.gentle[i] <- error.gentle/cantidad.grupos
+  
+}
+
+#===============
+resultados <- data.frame("discrete" = deteccion.si.discrete,
+                         "real" = deteccion.si.real,
+                         "gentle" = deteccion.si.gentle)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Detección del Si Tumor", 
+        xlab = "Número de iteración",
+        ylab = "Cantidad de Si tumores detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+
+
+```
+
+##### Para este caso, el mejor metodo ha sido 'gentle', sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, cuesta un poco determinar cual ha sido el mejor
+
+## 2.2
+
+```{r ej2.2}
+# Errores
+
+resultados <- data.frame("discrete" = deteccion.error.discrete,
+                         "real" = deteccion.error.real,
+                         "gentle" = deteccion.error.gentle)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Comparación del Error Global", 
+        xlab = "Número de iteración",
+        ylab = "Porcentaje de Error Global",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA, cex = 0.8,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+##### El mejor algoritmo a la hora de correr el ejercicio ha sido 'gentle', ya que para este metodo se obtiene una mayor acrtacion en los 1's, ademas de que el error global se mantiene bastante bajo, lo que significa que ha sido bastante preciso. Claramente el reultado puede cambiar a la hora de ejecutar el archivo nuevamente.
+
+## 2.3
+
+```{r ej2.3}
+ # Lista para almacenar las matrices de confusión por iteración
+lista.matrices.discrete <- list() 
+lista.matrices.real <- list()  
+lista.matrices.gentle <- list()
+
+
+
+for (i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  # Lista para almacenar las matrices de confusión por cada k
+  matrices.discrete <- list()  
+  matrices.real <- list() 
+  matrices.gentle <- list() 
+  
+  for (k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    ttesting <- Datos[muestra, ]
+    ttraining <- Datos[-muestra, ]
+    
+    # discrete
+    modelo<-train.ada(tipo~.,data=ttraining,iter=80,nu=1,type="discrete")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.discrete[[k]] <- MC
+    
+    # real
+    modelo<-train.ada(tipo~.,data=ttraining,iter=80,nu=1,type="real")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.real[[k]] <- MC
+    
+    #gentle
+    modelo<-train.ada(tipo~.,data=ttraining,iter=80,nu=1,type="gentle")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.gentle[[k]] <-MC
+    
+  }
+  
+   #inserta el promedio de las matrices del for interno en otra lista
+  lista.matrices.discrete[[i]] <- Reduce('+', matrices.discrete) / length(matrices.discrete)
+  lista.matrices.real[[i]] <-  Reduce('+', matrices.real) / length(matrices.real)
+  lista.matrices.gentle[[i]] <- Reduce('+', matrices.gentle) / length(matrices.gentle)
+  
+}
+
+
+#saca el promedio de la lista de matrices de confusion promedio
+matriz.promedio.discrete <- Reduce('+', lista.matrices.discrete) / length(lista.matrices.discrete)
+matriz.promedio.real <- Reduce('+', lista.matrices.real) / length(lista.matrices.real)
+matriz.promedio.gentle <-Reduce('+', lista.matrices.gentle) / length(lista.matrices.gentle)
+
+
+# Medicion de 1's
+resultados <- data.frame("discrete" = matriz.promedio.discrete[2,2],
+                         "real" = matriz.promedio.real[2,2],
+                         "gentle" = matriz.promedio.gentle[2,2])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de 1's en las Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de 0's
+resultados <- data.frame("discrete" = matriz.promedio.discrete[1,1],
+                         "real" = matriz.promedio.real[1,1],
+                         "gentle" = matriz.promedio.gentle[1,1])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de 0's en las Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de error
+
+
+resultados <- data.frame("discrete" = general.indexes(mc=matriz.promedio.discrete)$overall.error,
+                         "real" = general.indexes(mc=matriz.promedio.real)$overall.error,
+                         "gentle" = general.indexes(mc=matriz.promedio.gentle)$overall.error)
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de Error en las Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+### 2.4
+
+##### Yo utilizaria el metodo 'gentle', debido a lo explicado en la conclusion del ejercicio 2.2 y a que podemos observar que es el que tiene mejores resultados a la hora de compilado.
+
+# EJERCICIO 3
+
+## 3.1
+
+```{r ej3.1}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+#si's
+deteccion.si.rectangular <- c()
+deteccion.si.triangular <- c()
+deteccion.si.epanechnikov <- c()
+deteccion.si.biweight <- c()
+deteccion.si.triweight <- c()
+deteccion.si.cos <- c()
+deteccion.si.inv <- c()
+deteccion.si.gaussian <- c()
+deteccion.si.optimal <- c()
+
+#errores
+deteccion.error.rectangular <- c()
+deteccion.error.triangular <- c()
+deteccion.error.epanechnikov <- c()
+deteccion.error.biweight <- c()
+deteccion.error.triweight <- c()
+deteccion.error.cos <- c()
+deteccion.error.inv <- c()
+deteccion.error.gaussian <- c()
+deteccion.error.optimal <- c()
+
+
+
+
+for(i in 1:cantidad.validacion.cruzada){
+  grupos  <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  si.rectangular <- 0
+  si.triangular <- 0
+  si.epanechnikov <- 0
+  si.biweight <- 0
+  si.triweight <- 0
+  si.cos <- 0
+  si.inv <- 0
+  si.gaussian <- 0
+  si.optimal <- 0
+  
+  error.rectangular <- 0
+  error.triangular <- 0
+  error.epanechnikov <- 0
+  error.biweight <- 0
+  error.triweight <- 0
+  error.cos <- 0
+  error.inv <- 0
+  error.gaussian  <- 0
+  error.optimal <- 0
+  
+  # Este ciclo es el que hace 'cross-validation' (validación cruzada) con 10
+  # grupos (Folds)
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    ttesting <- Datos[muestra, ]
+    ttraining <- Datos[-muestra, ]
+    
+    #rectangular
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "rectangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.rectangular <- si.rectangular + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.rectangular<-error.rectangular+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    
+     #triangular
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.triangular <- si.triangular + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.triangular<-error.triangular+(1-(sum(diag(MC)))/sum(MC))*100
+    
+     #epanechnikov
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "epanechnikov")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.epanechnikov <- si.epanechnikov + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.epanechnikov<-error.epanechnikov+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #biweight
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "biweight")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.biweight <- si.biweight + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.biweight<-error.biweight+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #triweight
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triweight")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.triweight <- si.triweight + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.triweight<-error.triweight+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #cos
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "cos")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.cos <- si.cos + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.cos<-error.cos+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #inv
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "inv")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.inv <- si.inv + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.inv<-error.inv+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #gaussian
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "gaussian")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.gaussian <- si.gaussian + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.gaussian<-error.gaussian+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #optimal
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "optimal")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.optimal <- si.optimal + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.optimal<-error.optimal+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    
+    
+  }
+  
+  deteccion.si.rectangular[i] <- si.rectangular
+  deteccion.si.triangular[i] <- si.triangular
+  deteccion.si.epanechnikov[i] <- si.epanechnikov
+  deteccion.si.biweight[i] <- si.biweight
+  deteccion.si.triweight[i] <- si.triweight
+  deteccion.si.cos[i] <- si.cos
+  deteccion.si.inv[i] <- si.inv
+  deteccion.si.gaussian[i] <- si.gaussian
+  deteccion.si.optimal[i]<- si.optimal
+  
+  #errores
+  
+  deteccion.error.rectangular[i] <- error.rectangular/cantidad.grupos
+  deteccion.error.triangular[i] <- error.triangular/cantidad.grupos
+  deteccion.error.epanechnikov[i] <- error.epanechnikov/cantidad.grupos
+  deteccion.error.biweight[i] <- error.biweight/cantidad.grupos
+  deteccion.error.triweight[i] <- error.triweight/cantidad.grupos
+  deteccion.error.cos[i] <- error.cos/cantidad.grupos
+  deteccion.error.inv[i] <- error.inv/cantidad.grupos
+  deteccion.error.gaussian[i] <- error.gaussian/cantidad.grupos
+  deteccion.error.optimal[i] <- error.optimal/cantidad.grupos
+  
+}
+
+#===============
+resultados <- data.frame("rectangular" = deteccion.si.rectangular,
+                         "triangular" = deteccion.si.triangular,
+                         "epanechnikov" = deteccion.si.epanechnikov,
+                         "biweight" = deteccion.si.biweight,
+                         "triweight" = deteccion.si.triweight,
+                         "cos" = deteccion.si.cos,
+                         "inv" = deteccion.si.inv,
+                         "gaussian" = deteccion.si.gaussian,
+                         "optimal" = deteccion.si.optimal)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Detección del Si Tumor", 
+        xlab = "Número de iteración",
+        ylab = "Cantidad de Si tumores detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+
+```
+
+##### Para este caso, los mejores metodos han sido 'inv' y optimal, sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, cuesta un poco determinar cual ha sido el mejor. Seria mejor utilizar otras formas para determinar el mejor metodo.
+
+## 3.2
+
+```{r ej3.2}
+
+resultados <- data.frame("rectangular" = deteccion.error.rectangular,
+                         "triangular" = deteccion.error.triangular,
+                         "epanechnikov" = deteccion.error.epanechnikov,
+                         "biweight" = deteccion.error.biweight,
+                         "triweight" = deteccion.error.triweight,
+                         "cos" = deteccion.error.cos,
+                         "inv" = deteccion.error.inv,
+                         "gaussian" = deteccion.error.gaussian,
+                         "optimal" = deteccion.error.optimal)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Comparación del Error Global", 
+        xlab = "Número de iteración",
+        ylab = "Porcentaje de Error Global",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA, cex = 0.8,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+##### Para este caso, los mejores metodos han sido 'inv', y optimal, sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, sigue costando un poco determinar cual ha sido el mejor. Ademas de que los resultados arrojados son bastantes similares. En este caso los 2 metodos obtienen un error global relativamente bajo comparado a los demas.
+
+## 3.3
+
+```{r ej3.3}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+ # Lista para almacenar las matrices de confusión por iteración
+lista.matrices.rectangular <- list() 
+lista.matrices.triangular <- list()  
+lista.matrices.epanechnikov <- list()  
+lista.matrices.biweight <- list()  
+lista.matrices.triweight <- list()  
+lista.matrices.cos <- list()  
+lista.matrices.inv <- list()  
+lista.matrices.gaussian <- list()  
+lista.matrices.optimal <- list()  
+
+
+
+for (i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  # Lista para almacenar las matrices de confusión por cada k
+  matrices.rectangular <- list()  
+  matrices.triangular <- list() 
+  matrices.epanechnikov <- list()  
+  matrices.biweight <- list() 
+  matrices.triweight <- list()  
+  matrices.cos <- list() 
+  matrices.inv <- list()  
+  matrices.gaussian <- list() 
+  matrices.optimal <- list()  
+  
+  for (k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    ttesting <- Datos[muestra, ]
+    ttraining <- Datos[-muestra, ]
+    
+    # Rectangular
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "rectangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.rectangular[[k]] <- MC
+    
+    # Triangular
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.triangular[[k]] <- MC
+    
+    #epanechnikov
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "epanechnikov")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.epanechnikov[[k]] <-MC
+    
+    #biweight
+
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "biweight")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.biweight[[k]]<-MC
+    
+    #triweight
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triweight")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.triweight[[k]]<-MC
+    
+    #cos
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "cos")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.cos[[k]]<-MC
+
+    #inv
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "inv")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.inv[[k]]<-MC
+    
+    #gaussian
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "gaussian")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.gaussian[[k]]<-MC
+
+    #optimal
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "optimal")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.optimal[[k]]<-MC
+    
+  }
+  
+   #inserta el promedio de las matrices del for interno en otra lista
+  lista.matrices.rectangular[[i]] <- Reduce('+', matrices.rectangular) / length(matrices.rectangular)
+  lista.matrices.triangular[[i]] <-  Reduce('+', matrices.triangular) / length(matrices.triangular)
+  lista.matrices.epanechnikov[[i]] <- Reduce('+', matrices.epanechnikov) / length(matrices.epanechnikov)
+  lista.matrices.biweight[[i]] <-  Reduce('+', matrices.biweight) / length(matrices.biweight)
+  lista.matrices.triweight[[i]] <- Reduce('+', matrices.triweight) / length(matrices.triweight)
+  lista.matrices.cos[[i]] <-  Reduce('+', matrices.cos) / length(matrices.cos)
+  lista.matrices.inv[[i]] <- Reduce('+', matrices.inv) / length(matrices.inv)
+  lista.matrices.gaussian[[i]] <-  Reduce('+', matrices.gaussian) / length(matrices.gaussian)
+  lista.matrices.optimal[[i]] <- Reduce('+', matrices.optimal) / length(matrices.optimal)
+  
+}
+
+
+#saca el promedio de la lista de matrices de confusion promedio
+matriz.promedio.rectangular <- Reduce('+', lista.matrices.rectangular) / length(lista.matrices.rectangular)
+matriz.promedio.triangular <- Reduce('+', lista.matrices.triangular) / length(lista.matrices.triangular)
+matriz.promedio.epanechnikov <-Reduce('+', lista.matrices.epanechnikov) / length(lista.matrices.epanechnikov)
+matriz.promedio.biweight <- Reduce('+', lista.matrices.biweight) / length(lista.matrices.biweight)
+matriz.promedio.triweight <- Reduce('+', lista.matrices.triweight) / length(lista.matrices.triweight)
+matriz.promedio.cos <- Reduce('+', lista.matrices.cos) / length(lista.matrices.cos)
+matriz.promedio.inv <- Reduce('+', lista.matrices.inv) / length(lista.matrices.inv)
+matriz.promedio.gaussian <- Reduce('+', lista.matrices.gaussian) / length(lista.matrices.gaussian)
+matriz.promedio.optimal <- Reduce('+', lista.matrices.optimal) / length(lista.matrices.optimal)
+
+
+# Medicion de 1's
+resultados <- data.frame("rectang" = matriz.promedio.rectangular[2,2],
+                         "triang" = matriz.promedio.triangular[2,2],
+                         "epanech" = matriz.promedio.epanechnikov[2,2],
+                         "biwei" = matriz.promedio.biweight[2,2],
+                         "triwei" = matriz.promedio.triweight[2,2],
+                         "cos" = matriz.promedio.cos[2,2],
+                         "inv" = matriz.promedio.inv[2,2],
+                         "gauss" = matriz.promedio.gaussian[2,2],
+                         "opt" = matriz.promedio.optimal[2,2])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de 1's en las Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de 0's
+resultados <- data.frame("rectang" = matriz.promedio.rectangular[1,1],
+                         "triang" = matriz.promedio.triangular[1,1],
+                         "epanech" = matriz.promedio.epanechnikov[1,1],
+                         "biwei" = matriz.promedio.biweight[1,1],
+                         "triwei" = matriz.promedio.triweight[1,1],
+                         "cos" = matriz.promedio.cos[1,1],
+                         "inv" = matriz.promedio.inv[1,1],
+                         "gauss" = matriz.promedio.gaussian[1,1],
+                         "opt" = matriz.promedio.optimal[1,1])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de 0's en las Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de error
+
+
+resultados <- data.frame("rectang" = general.indexes(mc=matriz.promedio.rectangular)$overall.error,
+                         "triang" = general.indexes(mc=matriz.promedio.triangular)$overall.error,
+                         "epane" = general.indexes(mc=matriz.promedio.epanechnikov)$overall.error,
+                         "biwei" = general.indexes(mc=matriz.promedio.biweight)$overall.error,
+                         "triwei" = general.indexes(mc=matriz.promedio.triweight)$overall.error,
+                         "cos" = general.indexes(mc=matriz.promedio.cos)$overall.error,
+                         "inv" = general.indexes(mc=matriz.promedio.inv)$overall.error,
+                         "gauss" = general.indexes(mc=matriz.promedio.gaussian)$overall.error,
+                         "opt" = general.indexes(mc=matriz.promedio.optimal)$overall.error)
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de error en las Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+## 3.4
+
+Se puede observar que los mejores resultados se obtienen al utilizar epanechnikov e inv tanto en error como en acierto de 1's y 0's. Por tanto, yo escogeria y utilizaria estos dos metodos a la hora de entrenar el modelo.
+
+# EJERCICIO 4
+
+## 4.1
+
+```{r ej4.1}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+#si's
+deteccion.si.svm <- c()
+deteccion.si.knn <- c()
+deteccion.si.arboles <- c()
+deteccion.si.bosques <- c()
+deteccion.si.potenciacion <- c()
+deteccion.si.xgboost <- c()
+deteccion.si.nnet <- c()
+
+#errores
+deteccion.error.svm <- c()
+deteccion.error.knn <- c()
+deteccion.error.arboles <- c()
+deteccion.error.bosques <- c()
+deteccion.error.potenciacion <- c()
+deteccion.error.xgboost <- c()
+deteccion.error.nnet <- c()
+
+
+
+
+for(i in 1:cantidad.validacion.cruzada){
+  grupos  <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  si.svm <- 0
+  si.knn <- 0
+  si.arboles <- 0
+  si.bosques <- 0
+  si.potenciacion <- 0
+  si.xgboost <- 0
+  si.nnet <- 0
+  
+  error.svm <- 0
+  error.knn <- 0
+  error.arboles <- 0
+  error.bosques <- 0
+  error.potenciacion <- 0
+  error.xgboost <- 0
+  error.nnet <- 0
+  
+  # Este ciclo es el que hace 'cross-validation' (validación cruzada) con 10
+  # grupos (Folds)
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    ttesting <- Datos[muestra, ]
+    ttraining <- Datos[-muestra, ]
+    
+    #svm
+    modelo <- train.svm(tipo ~ ., data = ttraining)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.svm <- si.svm + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.svm<-error.svm+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    
+     #knn
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.knn <- si.knn + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.knn<-error.knn+(1-(sum(diag(MC)))/sum(MC))*100
+    
+     #arboles
+    modelo <- train.rpart(tipo~ contraste + energia + homogeneidad,data = ttraining, minsplit=2)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.arboles <- si.arboles + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.arboles<-error.arboles+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #bosques
+    modelo <- train.randomForest(tipo~ .,data=ttraining,importance=TRUE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.bosques <- si.bosques + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.bosques<-error.bosques+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #potenciacion
+    modelo <- train.ada(formula = tipo~.,data = ttraining, iter=500)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.potenciacion <- si.potenciacion + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.potenciacion<-error.potenciacion+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #xgboost
+    modelo <- train.xgboost(formula = tipo~.,data = ttraining,nrounds = 500,verbose = F)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.xgboost <- si.xgboost + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.xgboost<-error.xgboost+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #nnet
+    modelo <- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = ttraining, size = 4, maxit   = 1000, MaxNWts = 400,trace=FALSE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.nnet <- si.nnet + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.nnet<-error.nnet+(1-(sum(diag(MC)))/sum(MC))*100
+  }
+  
+  deteccion.si.svm[i] <- si.svm
+  deteccion.si.knn[i] <- si.knn
+  deteccion.si.arboles[i] <- si.arboles
+  deteccion.si.bosques[i] <- si.bosques
+  deteccion.si.potenciacion[i] <- si.potenciacion
+  deteccion.si.xgboost[i] <- si.xgboost
+  deteccion.si.nnet[i] <- si.nnet
+  
+  #errores
+  
+  deteccion.error.svm[i] <- error.svm/cantidad.grupos
+  deteccion.error.knn[i] <- error.knn/cantidad.grupos
+  deteccion.error.arboles[i] <- error.arboles/cantidad.grupos
+  deteccion.error.bosques[i] <- error.bosques/cantidad.grupos
+  deteccion.error.potenciacion[i] <- error.potenciacion/cantidad.grupos
+  deteccion.error.xgboost[i] <- error.xgboost/cantidad.grupos
+  deteccion.error.nnet[i] <- error.nnet/cantidad.grupos
+  
+}
+
+#===============
+resultados <- data.frame("svm" = deteccion.si.svm,
+                         "knn" = deteccion.si.knn,
+                         "arboles" = deteccion.si.arboles,
+                         "bosques" = deteccion.si.bosques,
+                         "potenciacion" = deteccion.si.potenciacion,
+                         "xgboost" = deteccion.si.xgboost,
+                         "nnet" = deteccion.si.nnet)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Detección del Si Tumor", 
+        xlab = "Número de iteración",
+        ylab = "Cantidad de Si tumores detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+
+# Errores
+
+resultados <- data.frame("svm" = deteccion.error.svm,
+                         "knn" = deteccion.error.knn,
+                         "arboles" = deteccion.error.arboles,
+                         "bosques" = deteccion.error.bosques,
+                         "potenciacion" = deteccion.error.potenciacion,
+                         "xgboost" = deteccion.error.xgboost,
+                         "nnet" = deteccion.error.nnet)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Comparación del Error Global", 
+        xlab = "Número de iteración",
+        ylab = "Porcentaje de Error Global",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA, cex = 0.8,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+##### Para este caso, los mejores metodos han sido nnet, potenciacion y bosques, sin embargo no es muy claro determinar cual de todos fue el mejor, ya que en algunos existe una alta precision con los 1's pero existe tambien un error global alto, por lo tanto, cuesta un poco determinar cual ha sido el mejor. En temas de error global, arboles y nnet obtienen mejores resultados al ser menor error. Pero a la hora de observar los aciertos en 1's, gana el nnet y bosques. Sin embargo el resultado puede llegar a se engañoso, ya que nnet y arboles podrian tener un error bastante alto.
+
+## 4.2
+
+```{r ej4.2}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+ # Lista para almacenar las matrices de confusión por iteración
+lista.matrices.svm <- list() 
+lista.matrices.knn <- list()  
+lista.matrices.arboles <- list()  
+lista.matrices.bosques <- list()  
+lista.matrices.potenciacion <- list()  
+lista.matrices.xgboost <- list()  
+lista.matrices.nnet <- list() 
+
+
+
+for (i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  # Lista para almacenar las matrices de confusión por cada k
+  matrices.svm <- list()  
+  matrices.knn <- list() 
+  matrices.arboles <- list()  
+  matrices.bosques <- list() 
+  matrices.potenciacion <- list()  
+  matrices.xgboost <- list() 
+  matrices.nnet <- list()  
+  
+  for (k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]
+    ttesting <- Datos[muestra, ]
+    ttraining <- Datos[-muestra, ]
+    
+    # svm
+    modelo <- train.svm(tipo ~ ., data = ttraining)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.svm[[k]] <- MC
+    
+    # knn
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.knn[[k]] <- MC
+    
+    #arboles
+    modelo <- train.rpart(tipo~ contraste + energia + homogeneidad,data = ttraining, minsplit=2)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.arboles[[k]] <-MC
+    
+    #bosques
+    modelo <- train.randomForest(tipo~ .,data=ttraining,importance=TRUE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.bosques[[k]]<-MC
+    
+    #potenciacion
+    modelo <- train.ada(formula = tipo~.,data = ttraining, iter=500)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.potenciacion[[k]]<-MC
+    
+    #xgboost
+    modelo <- train.xgboost(formula = tipo~.,data = ttraining,nrounds = 500,verbose = F)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.xgboost[[k]]<-MC
+
+    #nnet
+    modelo <- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = ttraining, size = 4, maxit   = 1000, MaxNWts = 400,trace=FALSE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.nnet[[k]]<-MC
+    
+  }
+  
+   #inserta el promedio de las matrices del for interno en otra lista
+  lista.matrices.svm[[i]] <- Reduce('+', matrices.svm) / length(matrices.svm)
+  lista.matrices.knn[[i]] <-  Reduce('+', matrices.knn) / length(matrices.knn)
+  lista.matrices.arboles[[i]] <- Reduce('+', matrices.arboles) / length(matrices.arboles)
+  lista.matrices.bosques[[i]] <-  Reduce('+', matrices.bosques) / length(matrices.bosques)
+  lista.matrices.potenciacion[[i]] <- Reduce('+', matrices.potenciacion) / length(matrices.potenciacion)
+  lista.matrices.xgboost[[i]] <-  Reduce('+', matrices.xgboost) / length(matrices.xgboost)
+  lista.matrices.nnet[[i]] <- Reduce('+', matrices.nnet) / length(matrices.nnet)
+  
+}
+
+
+#saca el promedio de la lista de matrices de confusion promedio
+matriz.promedio.svm <- Reduce('+', lista.matrices.svm) / length(lista.matrices.svm)
+matriz.promedio.knn <- Reduce('+', lista.matrices.knn) / length(lista.matrices.knn)
+matriz.promedio.arboles <-Reduce('+', lista.matrices.arboles) / length(lista.matrices.arboles)
+matriz.promedio.bosques <- Reduce('+', lista.matrices.bosques) / length(lista.matrices.bosques)
+matriz.promedio.potenciacion <- Reduce('+', lista.matrices.potenciacion) / length(lista.matrices.potenciacion)
+matriz.promedio.xgboost <- Reduce('+', lista.matrices.xgboost) / length(lista.matrices.xgboost)
+matriz.promedio.nnet <- Reduce('+', lista.matrices.nnet) / length(lista.matrices.nnet)
+
+
+# Medicion de 1's
+resultados <- data.frame("svm" = matriz.promedio.svm[2,2],
+                         "knn" = matriz.promedio.knn[2,2],
+                         "arboles" = matriz.promedio.arboles[2,2],
+                         "bosques" = matriz.promedio.bosques[2,2],
+                         "ada" = matriz.promedio.potenciacion[2,2],
+                         "xgboost" = matriz.promedio.xgboost[2,2],
+                         "nnet" = matriz.promedio.nnet[2,2])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de 1's en la matriz de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de 0's
+resultados <- data.frame("svm" = matriz.promedio.svm[1,1],
+                         "knn" = matriz.promedio.knn[1,1],
+                         "arboles" = matriz.promedio.arboles[1,1],
+                         "bosques" = matriz.promedio.bosques[1,1],
+                         "ada" = matriz.promedio.potenciacion[1,1],
+                         "xgboost" = matriz.promedio.xgboost[1,1],
+                         "nnet" = matriz.promedio.nnet[1,1])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de 0's en la Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de error
+
+
+resultados <- data.frame("svm" = general.indexes(mc=matriz.promedio.svm)$overall.error,
+                         "knn" = general.indexes(mc=matriz.promedio.knn)$overall.error,
+                         "arbol" = general.indexes(mc=matriz.promedio.arboles)$overall.error,
+                         "bosqu" = general.indexes(mc=matriz.promedio.bosques)$overall.error,
+                         "ada" = general.indexes(mc=matriz.promedio.potenciacion)$overall.error,
+                         "xgboost" = general.indexes(mc=matriz.promedio.xgboost)$overall.error,
+                         "nnet" = general.indexes(mc=matriz.promedio.nnet)$overall.error,
+                         "gauss" = general.indexes(mc=matriz.promedio.gaussian)$overall.error,
+                         "opt" = general.indexes(mc=matriz.promedio.optimal)$overall.error)
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+### 4.3
+
+##### Yo utilizaria bosques, ya que ha sido el que da resultados mas estables. Es decir se obtiene muy buena precision y muy bajo error global. Ademas de bosques, yo considerarioa xgboost y knn , ya que tambien dan buenos resultados en este caso. A pesar de todo esto, dependiendo del momento en que se corra, puede arrojar otros resultados, por tanto depende del producto o resultado que imprima el ejercicio ya puesto en procesamiento. Segun los ejercicios anteriores, los mejores eran arboles y nnet, sin embargo gracias a este grafico, se puede observar que no es asi.

@@ -1,0 +1,980 @@
+---
+title: "Tarea13_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-06-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(snow)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+library(ROCR)
+```
+
+# Funciones generales
+
+```{r}
+plotROC <- function(prediccion, real, adicionar = FALSE, color = "red") {
+  pred <- ROCR::prediction(prediccion, real)    
+  perf <- ROCR::performance(pred, "tpr", "fpr")
+  plot(perf, col = color, add = adicionar, main = "Curva ROC")
+  segments(0, 0, 1, 1, col='black')
+  grid()  
+}
+
+calculaAreaROC <- function(prediccion, real) {
+  pred <- ROCR::prediction(prediccion, real)
+  perf <- ROCR::performance(pred, "auc")
+  auc <- as.numeric(perf@y.values)
+  return(auc)
+}
+
+precision<-function(clase){
+  function(mc){
+    indices=general.indexes(mc=mc)
+    indices$category.accuracy[clase]
+  }
+}
+
+precision.global<-function(x) sum(diag(x))/sum(x)
+
+error.global <- function(x) 1 - sum(diag(x))/sum(x)
+```
+
+# Ejercicio #1
+
+## Lectura
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 13/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+ttraining <- Datos[-indice, ]
+```
+
+## 1.1
+
+```{r}
+
+tam <- floor(sqrt(nrow(Datos))) 
+
+#====================================
+#svm
+modelo <- train.svm(tipo ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase)
+
+#calcula el area de la curva
+svm_area <- calculaAreaROC(Score, Clase)
+
+
+
+#====================================
+#knn
+modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "blue")
+
+#calcula el area de la curva
+knn_area <- calculaAreaROC(Score, Clase)
+
+#====================================
+#arboles
+modelo <- train.rpart(tipo ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "green")
+
+#calcula el area de la curva
+rpart_area <- calculaAreaROC(Score, Clase)
+
+#====================================
+#bosques
+modelo <- train.randomForest(tipo ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "yellow")
+
+#calcula el area de la curva
+randomForest_area <- calculaAreaROC(Score, Clase)
+
+#====================================
+#potenciacion
+modelo <- train.ada(tipo ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "orange")
+
+#calcula el area de la curva
+ada_area <- calculaAreaROC(Score, Clase)
+
+# #====================================
+#xgboost
+modelo <- train.xgboost(tipo ~ ., data = ttraining, nrounds = 500,
+                        print_every_n = 1000, maximize = F , eval_metric = "error")
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "lightblue")
+
+#calcula el area de la curva
+xgboost_area <- calculaAreaROC(Score, Clase)
+
+#====================================
+#lda
+modelo <- train.lda(tipo ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "lightgray")
+
+#calcula el area de la curva
+lda_area <- calculaAreaROC(Score, Clase)
+
+#====================================
+#bayes
+modelo <- train.bayes(tipo ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "brown")
+
+#calcula el area de la curva
+bayes_area <- calculaAreaROC(Score, Clase)
+
+
+#====================================
+#nnet
+modelo <- train.nnet(tipo ~ ., data = ttraining, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$tipo
+# Genera el gráfico
+plotROC(Score,Clase, adicionar=TRUE, color = "purple")
+
+#calcula el area de la curva
+nnet_area <- calculaAreaROC(Score, Clase)
+
+
+```
+
+El mejor hasta el momento parecen ser mejores bosques, el cual es la curva que esta en color amarillo o ADA, la cual esta en color anaranjado, esta es muy parecida a la curva de bosques, por lo cual cuesta observarla bien, sin embargo se encuentra en algunos momentos por encima de bosques.
+
+## 1.2
+
+```{r}
+
+resultados <- data.frame(Modelo = c("SVM", "KNN", "RPART", "RFOREST","ADA", "XGBOOST",
+                                    "LDA","BAYES", "NNET"),
+                         AREA = c(svm_area, knn_area,rpart_area, randomForest_area,
+                                     ada_area,xgboost_area,lda_area,bayes_area,nnet_area))
+
+#Saca el mejor modelo, es decir, el modelo con mas area sobre la linea, o la curva con mas area 
+
+mejor_modelo <- resultados[which.max(resultados$AREA),]
+
+mejor_modelo
+
+```
+
+Como podemos observar, bajo este proceso, el mejor metodo es el metodo ADA, ya que es el que tiene una mayor area en la curva, es decir, tiene mejores resultados en la curva que los demas metodos.
+
+# Ejercicio #2
+
+## 2.1
+
+|            |                |           |           |
+|------------|----------------|-----------|-----------|
+| Punto 1    | Umbral = T = 1 | Tasa FP=0 | Tasa TP=0 |
+| MC         |                | *Pred*    | *Pred*    |
+|            | **Clase**      | **0**     | **1**     |
+| ***Real*** | **0**          | 6         | 0         |
+| ***Real*** | **1**          | 4         | 0         |
+
+|            |                   |           |           |
+|------------|-------------------|-----------|-----------|
+| Punto 2    | Umbral = T = 0.95 | Tasa FP=0 | Tasa TP=0 |
+| MC         |                   | *Pred*    | *Pred*    |
+|            | **Clase**         | **0**     | **1**     |
+| ***Real*** | **0**             | 6         | 0         |
+| ***Real*** | **1**             | 5         | 0         |
+
+|            |                  |           |           |
+|------------|------------------|-----------|-----------|
+| Punto 3    | Umbral = T = 0.9 | Tasa FP=0 | Tasa TP=0 |
+| MC         |                  | *Pred*    | *Pred*    |
+|            | **Clase**        | **0**     | **1**     |
+| ***Real*** | **0**            | 6         | 0         |
+| ***Real*** | **1**            | 4         | 0         |
+
+|            |                   |           |           |
+|------------|-------------------|-----------|-----------|
+| Punto 4    | Umbral = T = 0.85 | Tasa FP=0 | Tasa TP=0 |
+| MC         |                   | *Pred*    | *Pred*    |
+|            | **Clase**         | **0**     | **1**     |
+| ***Real*** | **0**             | 6         | 0         |
+| ***Real*** | **1**             | 4         | 0         |
+
+|            |                  |              |           |
+|------------|------------------|--------------|-----------|
+| Punto 5    | Umbral = T = 0.8 | Tasa FP=0.17 | Tasa TP=0 |
+| MC         |                  | *Pred*       | *Pred*    |
+|            | **Clase**        | **0**        | **1**     |
+| ***Real*** | **0**            | 5            | 1         |
+| ***Real*** | **1**            | 4            | 0         |
+
+|            |                   |              |           |
+|------------|-------------------|--------------|-----------|
+| Punto 6    | Umbral = T = 0.75 | Tasa FP=0.17 | Tasa TP=0 |
+| MC         |                   | *Pred*       | *Pred*    |
+|            | **Clase**         | **0**        | **1**     |
+| ***Real*** | **0**             | 5            | 1         |
+| ***Real*** | **1**             | 4            | 0         |
+
+|            |                  |              |           |
+|------------|------------------|--------------|-----------|
+| Punto 7    | Umbral = T = 0.7 | Tasa FP=0.17 | Tasa TP=0 |
+| MC         |                  | *Pred*       | *Pred*    |
+|            | **Clase**        | **0**        | **1**     |
+| ***Real*** | **0**            | 5            | 1         |
+| ***Real*** | **1**            | 4            | 0         |
+
+|            |                   |              |           |
+|------------|-------------------|--------------|-----------|
+| Punto 8    | Umbral = T = 0.65 | Tasa FP=0.33 | Tasa TP=0 |
+| MC         |                   | *Pred*       | *Pred*    |
+|            | **Clase**         | **0**        | **1**     |
+| ***Real*** | **0**             | 4            | 2         |
+| ***Real*** | **1**             | 4            | 0         |
+
+|            |                  |              |              |
+|------------|------------------|--------------|--------------|
+| Punto 9    | Umbral = T = 0.6 | Tasa FP=0.33 | Tasa TP=0.25 |
+| MC         |                  | *Pred*       | *Pred*       |
+|            | **Clase**        | **0**        | **1**        |
+| ***Real*** | **0**            | 4            | 2            |
+| ***Real*** | **1**            | 3            | 1            |
+
+|            |                   |              |              |
+|------------|-------------------|--------------|--------------|
+| Punto 10   | Umbral = T = 0.55 | Tasa FP=0.33 | Tasa TP=0.25 |
+| MC         |                   | *Pred*       | *Pred*       |
+|            | **Clase**         | **0**        | **1**        |
+| ***Real*** | **0**             | 4            | 2            |
+| ***Real*** | **1**             | 3            | 1            |
+
+|            |                  |              |              |
+|------------|------------------|--------------|--------------|
+| Punto 11   | Umbral = T = 0.5 | Tasa FP=0.33 | Tasa TP=0.25 |
+| MC         |                  | *Pred*       | *Pred*       |
+|            | **Clase**        | **0**        | **1**        |
+| ***Real*** | **0**            | 4            | 2            |
+| ***Real*** | **1**            | 3            | 1            |
+
+|            |                   |             |              |
+|------------|-------------------|-------------|--------------|
+| Punto 12   | Umbral = T = 0.45 | Tasa FP=0.5 | Tasa TP=0.25 |
+| MC         |                   | *Pred*      | *Pred*       |
+|            | **Clase**         | **0**       | **1**        |
+| ***Real*** | **0**             | 3           | 3            |
+| ***Real*** | **1**             | 3           | 1            |
+
+|            |                  |             |             |
+|------------|------------------|-------------|-------------|
+| Punto 13   | Umbral = T = 0.4 | Tasa FP=0.5 | Tasa TP=0.5 |
+| MC         |                  | *Pred*      | *Pred*      |
+|            | **Clase**        | **0**       | **1**       |
+| ***Real*** | **0**            | 3           | 3           |
+| ***Real*** | **1**            | 2           | 2           |
+
+|            |                   |             |             |
+|------------|-------------------|-------------|-------------|
+| Punto 14   | Umbral = T = 0.35 | Tasa FP=0.5 | Tasa TP=0.5 |
+| MC         |                   | *Pred*      | *Pred*      |
+|            | **Clase**         | **0**       | **1**       |
+| ***Real*** | **0**             | 3           | 3           |
+| ***Real*** | **1**             | 2           | 2           |
+
+|            |                  |             |             |
+|------------|------------------|-------------|-------------|
+| Punto 15   | Umbral = T = 0.3 | Tasa FP=0.5 | Tasa TP=0.5 |
+| MC         |                  | *Pred*      | *Pred*      |
+|            | **Clase**        | **0**       | **1**       |
+| ***Real*** | **0**            | 3           | 3           |
+| ***Real*** | **1**            | 2           | 2           |
+
+|            |                   |             |             |
+|------------|-------------------|-------------|-------------|
+| Punto 16   | Umbral = T = 0.25 | Tasa FP=0.5 | Tasa TP=0.5 |
+| MC         |                   | *Pred*      | *Pred*      |
+|            | **Clase**         | **0**       | **1**       |
+| ***Real*** | **0**             | 3           | 3           |
+| ***Real*** | **1**             | 2           | 2           |
+
+|            |                  |             |             |
+|------------|------------------|-------------|-------------|
+| Punto 17   | Umbral = T = 0.2 | Tasa FP=0.5 | Tasa TP=0.5 |
+| MC         |                  | *Pred*      | *Pred*      |
+|            | **Clase**        | **0**       | **1**       |
+| ***Real*** | **0**            | 3           | 3           |
+| ***Real*** | **1**            | 2           | 2           |
+
+|            |                   |              |              |
+|------------|-------------------|--------------|--------------|
+| Punto 18   | Umbral = T = 0.15 | Tasa FP=0.67 | Tasa TP=0.75 |
+| MC         |                   | *Pred*       | *Pred*       |
+|            | **Clase**         | **0**        | **1**        |
+| ***Real*** | **0**             | 2            | 4            |
+| ***Real*** | **1**             | 1            | 3            |
+
+|            |                   |              |           |
+|------------|-------------------|--------------|-----------|
+| Punto 19   | Umbral = T = 0.10 | Tasa FP=0.67 | Tasa TP=1 |
+| MC         |                   | *Pred*       | *Pred*    |
+|            | **Clase**         | **0**        | **1**     |
+| ***Real*** | **0**             | 2            | 4         |
+| ***Real*** | **1**             | 0            | 4         |
+
+|            |                   |              |           |
+|------------|-------------------|--------------|-----------|
+| Punto 20   | Umbral = T = 0.05 | Tasa FP=0.83 | Tasa TP=1 |
+| MC         |                   | *Pred*       | *Pred*    |
+|            | **Clase**         | **0**        | **1**     |
+| ***Real*** | **0**             | 1            | 5         |
+| ***Real*** | **1**             | 0            | 4         |
+
+## 2.2
+
+```{r}
+Clase <- c(1,0,0,1,0,0,1,0,0,1)
+Score <- c(0.61, 0.06,0.80, 0.11, 0.66, 0.46, 0.40, 0.19, 0.00, 0.91)
+
+# Graficamos ROC con funciones de paquete ROCR
+plotROC(Score, Clase)
+
+# Graficamos puntos con algoritmo
+i <- 1  # Contador
+FP_r <- -1  # Para que entre al condicional en la primera iteración
+TP_r <- -1  # Para que entre al condicional en la primera iteración
+
+for(Umbral in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Umbral, 1, 0)
+  
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c(0, 1)))
+  
+  # Condicional para no imprimir puntos repetidos
+  if(FP_r != MC[1, 2] / sum(MC[1, ]) | TP_r != MC[2, 2] / sum(MC[2, ])) {
+    
+    FP_r <- MC[1, 2] / sum(MC[1, ])  # Tasa de Falsos Positivos
+    TP_r <- MC[2, 2] / sum(MC[2, ])  # Tasa de Verdaderos Positivos
+    
+    # Graficamos punto
+    points(FP_r, TP_r, col = "blue")
+    text(FP_r + 0.02, TP_r - 0.02, Umbral)
+    
+    # Imprimimos resultados
+    cat("Punto i = ", i, "\n")  
+    cat("Umbral = T = ", Umbral, "\n")
+    cat("MC = \n")
+    print(MC)
+    cat("Tasa FP = ", round(FP_r, 2), "\n")
+    cat("Tasa TP = ", round(TP_r, 2), "\n") 
+    cat("\n") 
+    
+    i <- i + 1  # Aumentamos contador
+    
+  }
+  
+}
+```
+
+## 2.3
+
+```{r}
+# =======================
+# Punto:  1
+# 2.7 > T y class= 1 => TP= 1
+# FP= 12
+# FP= 10
+# FP/10= 1.2
+# TP/10= 1
+# Punto: ( 2 , 2.5 )
+# 
+# =======================
+# Punto:  2
+# 2.8 > T y class= 0 => FP= 1
+# FP= 13
+# FP= 10
+# FP/10= 1.3
+# TP/10= 1
+# Punto: ( 2.1667 , 2.5 )
+# 
+# =======================
+# Punto:  3
+# 2.9 > T y class= 0 => FP= 2
+# FP= 14
+# FP= 10
+# FP/10= 1.4
+# TP/10= 1
+# Punto: ( 2.3333 , 2.5 )
+# 
+# =======================
+# Punto:  4
+# 3 > T y class= 1 => TP= 2
+# FP= 14
+# FP= 11
+# FP/10= 1.4
+# TP/10= 1.1
+# Punto: ( 2.333 , 2.75 )
+# 
+# =======================
+# Punto:  5
+# 3.1 > T y class= 0 => FP= 3
+# FP= 15
+# FP= 11
+# FP/10= 1.5
+# TP/10= 1.1
+# Punto: ( 2.5 , 2.75 )
+# 
+# =======================
+# Punto:  6
+# 3.2 > T y class= 1 => TP= 3
+# FP= 15
+# FP= 12
+# FP/10= 1.5
+# TP/10= 1.2
+# Punto: ( 2.5 , 3 )
+# 
+# =======================
+# Punto:  7
+# 3.3 > T y class= 0 => FP= 4
+# FP= 16
+# FP= 12
+# FP/10= 1.6
+# TP/10= 1.2
+# Punto: ( 2.667 , 3 )
+# 
+# =======================
+# Punto:  8
+# 3.4 > T y class= 1 => TP= 4
+# FP= 16
+# FP= 13
+# FP/10= 1.6
+# TP/10= 1.3
+# Punto: ( 2.6667 , 3.25 )
+# 
+# =======================
+# Punto:  9
+# 3.5 > T y class= 0 => FP= 5
+# FP= 17
+# FP= 13
+# FP/10= 1.7
+# TP/10= 1.3
+# Punto: ( 2.8333 , 3.25 )
+# 
+# =======================
+# Punto:  10
+# 3.6 > T y class= 0 => FP= 6
+# FP= 18
+# FP= 13
+# FP/10= 1.8
+# TP/10= 1.3
+# Punto: ( 3 , 3.25 )
+```
+
+## 2.4
+
+```{r}
+
+Clase <- c(1,0,0,1,0,1,0,1,0,0)
+Score <- c(0.91,0.80, 0.66, 0.61, 0.46, 0.40, 0.19, 0.11, 0.06, 0.00)
+
+plotROC(Score, Clase)
+
+Umbral<--0.5
+Paso <- 0.1
+
+N <- 6 # ceros
+P <- 4 # unos
+
+TP <- 0 
+FP <- 0
+
+for(i in 1:10) { 
+  
+  if(Score[i] > Umbral)
+    if(Clase[i] == 1)
+      TP <- TP + 1
+  else 
+    FP <- FP + 1
+  else 
+    if(Clase[i] == 0)
+      FP <- FP + 1
+    else 
+      TP <- TP + 1
+    
+    # Graficamos punto
+    points(FP / N, TP / P, col = "blue")
+    text(FP / N + 0.02, TP / P - 0.02, i)
+    
+    Umbral <- Umbral + Paso  
+    
+}
+
+```
+
+# Ejercicio #3
+
+### Lectura de Datos
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 13/Datos Clase y Tareas")
+Datos <- read.csv("SAheart.csv", header=TRUE, sep=';',dec='.',stringsAsFactors = T)
+
+# set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$chd, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+ttraining <- Datos[-indice, ]
+```
+
+## 3.1
+
+```{r}
+
+probabilidades <- seq(1, 0, by = -0.05)
+resultados <- data.frame(matrix(0, nrow = 9, ncol = length(probabilidades) + 1))
+
+colnames(resultados) <- c("Modelo", as.character(probabilidades))
+
+resultados$Modelo <- c("SVM", "KNN", "RPART", "RFOREST", "ADA", "XGBOOST", "LDA", "BAYES", "NNET")
+
+
+#====================================
+#svm
+modelo <- train.svm(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[1, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+
+#====================================
+#knn
+modelo <- train.knn(chd ~ ., data = ttraining, kmax = tam)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[2, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#arboles
+modelo <- train.rpart(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[3, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#bosques
+modelo <- train.randomForest(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[4, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#potenciacion
+modelo <- train.ada(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[5, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+# #====================================
+# #xgboost
+modelo <- train.xgboost(chd ~ ., data = ttraining, nrounds = 500,
+                        print_every_n = 1000, maximize = F , eval_metric = "error")
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[6, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#lda
+modelo <- train.lda(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[7, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#bayes
+modelo <- train.bayes(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[8, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#nnet
+modelo <- train.nnet(chd ~ ., data = ttraining, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[9, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+print(resultados)
+```
+
+## 3.2
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+
+ejecutar.prediccion <- function(datos, formula, muestra, metodo, ...) {
+  ttesting <- datos[muestra, ]
+  ttraining <- datos[-muestra, ]
+  modelo <- do.call(metodo, list(formula, data = ttraining, ...))
+  prediccion <- predict(modelo, ttesting, type = "class")
+  MC <- confusion.matrix(ttesting, prediccion)
+  return(MC)
+}
+
+# La siguiente función permite fijar parámetros específicos para cada método, lo cual es útil para usar otros parámetros que no sean los default.
+
+ejecutar.prediccion.particular <- function(datos, formula, muestra, metodo) {
+  if(metodo == "train.svm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.knn"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo,kernel="optimal", kmax = tam))}
+  if(metodo == "train.bayes"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.rpart"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.randomForest"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, importance = TRUE))}
+  if(metodo == "train.ada"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, iter = 500, type = "gentle"))}
+  if(metodo == "train.nnet"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE))}
+  if(metodo == "train.xgboost"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, nrounds = 500))}
+  if(metodo == "train.glm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.neuralnet"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, hidden = c(8,6,4), linear.output = FALSE))}
+}
+
+# Constructor del cluster
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 3
+cantidad.grupos <- 10
+metodos <- c("train.svm", "train.knn", "train.bayes", "train.rpart", "train.randomForest", "train.ada", "train.nnet",
+             "train.xgboost", "train.neuralnet", "train.glm")
+
+tam <- floor(sqrt(nrow(Datos))) 
+clusterExport(clp, "tam")
+
+MCs.svm <- list()
+MCs.knn <- list()
+MCs.bayes <- list()
+MCs.arbol <- list()
+MCs.bosque <- list()
+MCs.potenciacion <- list()
+MCs.red <- list()
+MCs.xgboost <- list()
+MCs.red.neu <- list()
+MCs.glm <- list()
+
+# Exportamos paquetes a los procesadores
+ignore <- clusterEvalQ(clp, {
+  library(dplyr)
+  library(traineR)
+  
+  return(NULL)
+})
+
+# Exportamos los datos y las funciones a los procesadores
+clusterExport(clp, list("Datos", "ejecutar.prediccion", "ejecutar.prediccion.particular"))
+
+tiempo.paralelo <- Sys.time()
+
+# Validación cruzada 3 veces
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  MC.svm <- matrix(c(0,0,0,0), nrow=2)
+  MC.knn <- matrix(c(0,0,0,0), nrow=2)
+  MC.bayes <- matrix(c(0,0,0,0), nrow=2)
+  MC.arbol <- matrix(c(0,0,0,0), nrow=2)
+  MC.bosque <- matrix(c(0,0,0,0), nrow=2)
+  MC.potenciacion <- matrix(c(0,0,0,0), nrow=2)
+  MC.red <- matrix(c(0,0,0,0), nrow=2)
+  MC.xg  <- matrix(c(0,0,0,0), nrow=2)
+  MC.red.neu <- matrix(c(0,0,0,0), nrow=2)
+  MC.glm <- matrix(c(0,0,0,0), nrow=2)
+  
+  # Este ciclo es el que hace validación cruzada con 10 grupos
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    # Exportamos la muestra a los procesadores
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, metodos, function(metodo) {
+     tryCatch({
+        MC <- ejecutar.prediccion.particular(datos = Datos, formula = chd ~ ., muestra = muestra, metodo              = metodo)
+      
+        valores <- list(Tipo = metodo, Resultado = MC)
+        return(valores)
+      }, error = function(e) {
+        return(list(Error = as.character(e)))
+      })
+    })
+    
+    for (j in seq_along(metodos)) {
+      if (resultado[[j]][[1]] == "train.svm")
+        MC.svm <- MC.svm + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.knn")
+        MC.knn <- MC.knn + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.bayes")
+        MC.bayes <- MC.bayes + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.rpart")
+        MC.arbol <- MC.arbol + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.randomForest")
+        MC.bosque <- MC.bosque + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.ada")
+        MC.potenciacion <- MC.potenciacion + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.nnet")
+        MC.red <- MC.red + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.xgboost")
+        MC.xg <- MC.xg + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.neuralnet")
+        MC.red.neu <- MC.red.neu + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.glm")
+        MC.glm <- MC.glm + resultado[[j]][[2]]
+    }
+    
+  }
+  MCs.svm[[i]] <- MC.svm
+  MCs.knn[[i]] <- MC.knn
+  MCs.bayes[[i]] <- MC.bayes
+  MCs.arbol[[i]] <- MC.arbol
+  MCs.bosque[[i]] <- MC.bosque
+  MCs.potenciacion[[i]] <- MC.potenciacion
+  MCs.red[[i]] <- MC.red
+  MCs.xgboost[[i]]<- MC.xg
+  MCs.red.neu[[i]] <- MC.red.neu
+  MCs.glm[[i]] <- MC.glm
+}
+
+stopCluster(clp)
+
+```
+
+```{r}
+# GRAFICACION Si's
+resultados <- data.frame("svm"     = sapply(MCs.svm,precision("Si")),
+                         "knn"     =sapply(MCs.knn,precision("Si")) ,
+                         "bayes" = sapply(MCs.bayes,precision("Si")),
+                         "arbol"     = sapply(MCs.arbol,precision("Si")),
+                         "bosque"     = sapply(MCs.bosque,precision("Si")),
+                         "potenciacion" = sapply(MCs.potenciacion,precision("Si")),
+                         "red.n"     = sapply(MCs.red,precision("Si")),
+                         "xgboost"     =sapply(MCs.xgboost,precision("Si")) ,
+                         "red.neu" = sapply(MCs.red.neu,precision("Si"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de Si's detectados",main = "Comparacion de porcentaje de Si's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+```
+
+Segun el grafico mostrado, en cada iteracion sobresale el metodo bayes, ya que es el que encuentra o predice la mayor de cantidad de Si's, refiriendose a que si se encuentra la variable 'chd' en el sistema del individuo. Por tanto, se puede deducir que este es el mejor metodo a la hora de ejecucion.
+
+## 3.3
+
+Claramente, a como se ha venido trabajando, y sabiendo todo lo que hemos aprendido en esta tarea y tema, se podria buscar cual es el corte de probabilidad mas eficiente para la prediccion de la variable 'chd' en este conjunto de datos. Asi nos aseguramos de que detecte la mayor cantidad de Si's, la variable que nos interesa, pero tambien detecte la mayor cantidad de No's al mismo tiempo. Y asi estar seguros de que se esta trabajando correctamente y de que la prediccion es lo mas precisa posible.

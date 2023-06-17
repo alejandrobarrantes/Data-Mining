@@ -1,0 +1,432 @@
+---
+title: "parte3"
+author: "Alejandro Barrantes Castro"
+date: "2023-06-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(snow)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+
+# Lectura de Datos
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 13/Datos Clase y Tareas")
+Datos <- read.csv("SAheart.csv", header=TRUE, sep=';',dec='.',stringsAsFactors = T)
+
+# set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$chd, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+ttraining <- Datos[-indice, ]
+```
+
+
+# 3.1
+
+```{r}
+
+probabilidades <- seq(1, 0, by = -0.05)
+resultados <- data.frame(matrix(0, nrow = 9, ncol = length(probabilidades) + 1))
+
+colnames(resultados) <- c("Modelo", as.character(probabilidades))
+
+resultados$Modelo <- c("SVM", "KNN", "RPART", "RFOREST", "ADA", "XGBOOST", "LDA", "BAYES", "NNET")
+
+
+#====================================
+#svm
+modelo <- train.svm(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[1, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+
+#====================================
+#knn
+modelo <- train.knn(chd ~ ., data = ttraining, kmax = tam)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[2, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#arboles
+modelo <- train.rpart(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[3, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#bosques
+modelo <- train.randomForest(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[4, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#potenciacion
+modelo <- train.ada(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[5, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+# #====================================
+# #xgboost
+# modelo <- train.xgboost(chd ~ ., data = ttraining, nrounds = 500)
+# prediccion <- predict(modelo, ttesting, type = "prob")
+# 
+# 
+# Score <- prediccion$prediction[,2]
+# Clase <- ttesting$chd
+# # Genera el gráfico
+# plotROC(Score,Clase, adicionar=TRUE, color = "lightblue")
+xgboost_area <- calculaAreaROC(Score, Clase)
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[6, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#lda
+modelo <- train.lda(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[7, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#bayes
+modelo <- train.bayes(chd ~ ., data = ttraining)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[8, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+#====================================
+#nnet
+modelo <- train.nnet(chd ~ ., data = ttraining, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE)
+prediccion <- predict(modelo, ttesting, type = "prob")
+
+
+Score <- prediccion$prediction[,2]
+Clase <- ttesting$chd
+
+# Calculo de probabilidades
+for(Corte in seq(1, 0, by = -0.05)) {
+  
+  Prediccion <- ifelse(Score >= Corte, "Si", "No")
+  MC <- table(Clase, Pred = factor(Prediccion, levels = c("No", "Si")))
+  indices<-general.indexes(mc=MC)
+  
+  negativos<-round(indices$category.accuracy[1], digits = 4)
+  positivos<-round(indices$category.accuracy[2], digits = 4)
+  
+  resultados[9, which(colnames(resultados) == (Corte))] <- paste("No: ",negativos,"Si: ", positivos)
+}
+
+print(resultados)
+```
+
+
+# 3.2
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+
+ejecutar.prediccion <- function(datos, formula, muestra, metodo, ...) {
+  ttesting <- datos[muestra, ]
+  ttraining <- datos[-muestra, ]
+  modelo <- do.call(metodo, list(formula, data = ttraining, ...))
+  prediccion <- predict(modelo, ttesting, type = "class")
+  MC <- confusion.matrix(ttesting, prediccion)
+  return(MC)
+}
+
+# La siguiente función permite fijar parámetros específicos para cada método, lo cual es útil para usar otros parámetros que no sean los default.
+
+ejecutar.prediccion.particular <- function(datos, formula, muestra, metodo) {
+  if(metodo == "train.svm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.knn"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo,kernel="optimal", kmax = tam))}
+  if(metodo == "train.bayes"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.rpart"){
+    return(ejecutar.prediccion(datos, tipo~ contraste + energia + homogeneidad, muestra, metodo))}
+  if(metodo == "train.randomForest"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, importance = TRUE))}
+  if(metodo == "train.ada"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, iter = 500, type = "gentle"))}
+  if(metodo == "train.nnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE))}
+  if(metodo == "train.xgboost"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, nrounds = 500))}
+  if(metodo == "train.glm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.neuralnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, hidden = c(8,6,4), linear.output = FALSE))}
+}
+
+# Constructor del cluster
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 3
+cantidad.grupos <- 10
+metodos <- c("train.svm", "train.knn", "train.bayes", "train.rpart", "train.randomForest", "train.ada", "train.nnet",
+             "train.xgboost", "train.neuralnet", "train.glm")
+
+tam <- floor(sqrt(nrow(Datos))) 
+clusterExport(clp, "tam")
+
+MCs.svm <- list()
+MCs.knn <- list()
+MCs.bayes <- list()
+MCs.arbol <- list()
+MCs.bosque <- list()
+MCs.potenciacion <- list()
+MCs.red <- list()
+MCs.xgboost <- list()
+MCs.red.neu <- list()
+MCs.glm <- list()
+
+# Exportamos paquetes a los procesadores
+ignore <- clusterEvalQ(clp, {
+  library(dplyr)
+  library(traineR)
+  
+  return(NULL)
+})
+
+# Exportamos los datos y las funciones a los procesadores
+clusterExport(clp, list("Datos", "ejecutar.prediccion", "ejecutar.prediccion.particular"))
+
+tiempo.paralelo <- Sys.time()
+
+# Validación cruzada 3 veces
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  MC.svm <- matrix(c(0,0,0,0), nrow=2)
+  MC.knn <- matrix(c(0,0,0,0), nrow=2)
+  MC.bayes <- matrix(c(0,0,0,0), nrow=2)
+  MC.arbol <- matrix(c(0,0,0,0), nrow=2)
+  MC.bosque <- matrix(c(0,0,0,0), nrow=2)
+  MC.potenciacion <- matrix(c(0,0,0,0), nrow=2)
+  MC.red <- matrix(c(0,0,0,0), nrow=2)
+  MC.xg  <- matrix(c(0,0,0,0), nrow=2)
+  MC.red.neu <- matrix(c(0,0,0,0), nrow=2)
+  MC.glm <- matrix(c(0,0,0,0), nrow=2)
+  
+  # Este ciclo es el que hace validación cruzada con 10 grupos
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    # Exportamos la muestra a los procesadores
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, metodos, function(metodo) {
+     tryCatch({
+        MC <- ejecutar.prediccion.particular(datos = Datos, formula = chd ~ ., muestra = muestra, metodo              = metodo)
+      
+        valores <- list(Tipo = metodo, Resultado = MC)
+        return(valores)
+      }, error = function(e) {
+        return(list(Error = as.character(e)))
+      })
+    })
+    
+    for (j in seq_along(metodos)) {
+      if (resultado[[j]][[1]] == "train.svm")
+        MC.svm <- MC.svm + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.knn")
+        MC.knn <- MC.knn + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.bayes")
+        MC.bayes <- MC.bayes + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.rpart")
+        MC.arbol <- MC.arbol + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.randomForest")
+        MC.bosque <- MC.bosque + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.ada")
+        MC.potenciacion <- MC.potenciacion + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.nnet")
+        MC.red <- MC.red + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.xgboost")
+        MC.xg <- MC.xg + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.neuralnet")
+        MC.red.neu <- MC.red.neu + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.glm")
+        MC.glm <- MC.glm + resultado[[j]][[2]]
+    }
+    
+  }
+  MCs.svm[[i]] <- MC.svm
+  MCs.knn[[i]] <- MC.knn
+  MCs.bayes[[i]] <- MC.bayes
+  MCs.arbol[[i]] <- MC.arbol
+  MCs.bosque[[i]] <- MC.bosque
+  MCs.potenciacion[[i]] <- MC.potenciacion
+  MCs.red[[i]] <- MC.red
+  MCs.xgboost[[i]]<- MC.xg
+  MCs.red.neu[[i]] <- MC.red.neu
+  MCs.glm[[i]] <- MC.glm
+}
+
+stopCluster(clp)
+
+```
+
+
+```{r}
+# GRAFICACION Si's
+resultados <- data.frame("svm"     = sapply(MCs.svm,precision("Si")),
+                         "knn"     =sapply(MCs.knn,precision("Si")) ,
+                         "bayes" = sapply(MCs.bayes,precision("Si")),
+                         "arbol"     = sapply(MCs.arbol,precision("Si")),
+                         "bosque"     = sapply(MCs.bosque,precision("Si")),
+                         "potenciacion" = sapply(MCs.potenciacion,precision("Si")),
+                         "red.n"     = sapply(MCs.red,precision("Si")),
+                         "xgboost"     =sapply(MCs.xgboost,precision("Si")) ,
+                         "red.neu" = sapply(MCs.red.neu,precision("Si"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de Si's detectados",main = "Comparacion de porcentaje de Si's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+```
+
+
+
+# 3.3
+
+```{r}
+
+```
+

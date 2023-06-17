@@ -1,0 +1,303 @@
+---
+title: "Tarea9_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-05-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+# Ejercicio #1
+
+### 1.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+taprendizaje <- Datos[-indice, ]
+```
+
+### 1.2
+
+```{r}
+# Con el paquete traineR, usando Bosques Aleatorios con 500 ´arboles, el M´etodo de Potenciaci´on con iter = 500 y XGBoosting con nrounds = 500 genere un modelos predictivos
+# para la tabla de aprendizaje
+
+tabla.indices <- data.frame()
+
+#Bosques aleatorios
+modelo<-train.randomForest(tipo~ contraste + energia + homogeneidad,data=taprendizaje,importance=TRUE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"Bosques Aleatorios"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+
+modelo <- train.ada(formula = tipo~.,data = taprendizaje, iter=500)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"Potenciacion"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+modelo <- train.xgboost(formula = tipo~.,
+              data = taprendizaje,
+              nrounds = 500,verbose = F)
+prediccion <- predict(modelo, ttesting , type = "class")
+mc <- confusion.matrix(ttesting,prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"xgboost"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+
+```
+
+### 1.3
+
+```{r}
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(tipo~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("svm-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(tipo~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("knn-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+
+# Definir los kernels que vamos a usar
+kernels <- c("sigmoid","radial","linear","triangular",
+  "epanechnikov","triweight","optimal")
+
+# Generar modelos con diferentes kernels
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+
+
+
+```
+
+Como se puede apreciar en la tabla anterior, el puesto del mejor metodo esta compartido entre el metodo de potenciacion y el metodo de xgboost, donde se obtiene una precision mayor del 95%. Se presenta un error muy bajo y muy buena precision por categoria. Esos 2 son los mejores metodos, sin embargo para este caso y tabla, todos los metodos funcionan bastante bien, ya que obtienen mas de 90% de precision.
+
+# Ejercicio 2
+
+### 2.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("titanicV2020.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+
+# Eliminamos las columnas PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked: 
+Datos <- subset(Datos, select = -c(PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked))
+#omitimos nulos
+Datos<-na.omit(Datos)
+#recodificamos
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+```
+
+### 2.2
+
+```{r}
+tam <- dim(Datos)
+n   <- tam[1]
+muestra      <- sample(1:n, floor(n*0.20))
+ttesting     <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+```
+
+### 2.3
+
+```{r}
+tabla.indices <- data.frame()
+
+#Bosques aleatorios
+modelo<-train.randomForest(Survived~ Sex + Age + Pclass,data=taprendizaje,importance=TRUE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"Bosques Aleatorios"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+
+modelo <- train.ada(formula = Survived~.,data = taprendizaje, iter=600)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"Potenciacion"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+modelo <- train.xgboost(formula = Survived~.,
+              data = taprendizaje,
+              nrounds = 600,verbose = F)
+prediccion <- predict(modelo, ttesting , type = "class")
+mc <- confusion.matrix(ttesting,prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"xgboost"
+tabla.indices <- rbind(tabla.indices,metricas)
+```
+
+### 2.4
+
+```{r}
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(Survived~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("svm-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(Survived~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("knn-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+```
+
+Como podemos observar, aunque puede que cambie un poco, el metodo de potenciacion con ada, es el que tiene mejores resultados junto con el metodo knn-epanechiknov en la parte de precision global, ademas tienen poco error, y muy buena precision por categoria, por lo que diria que esos 2 se comportan muy bien para esta tabla. Sin embargo, como se puede observar, los metodos de arboles y xgboost se comportan muy bien con respecto a la precision global y por categoria
+
+# Ejercicio 3
+
+### 3.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("ZipData_2020.csv", header=TRUE, sep=';',dec='.', stringsAsFactors = T)
+```
+
+### 3.2
+
+```{r}
+set.seed(123)
+
+tam<-dim(Datos)
+n<-tam[1]
+muestra <- sample(1:n,floor(n*0.20))
+ttesting <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+
+tabla.indices <- data.frame()
+
+#Bosques aleatorios
+modelo<-train.randomForest(Numero~ .,data=taprendizaje,importance=TRUE)
+prediccion <- predict(modelo, ttesting, type = "class")
+mc <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"Bosques Aleatorios"
+tabla.indices <- rbind(tabla.indices,metricas)
+general.indexes(mc=mc)
+
+modelo <- train.xgboost(formula = Numero~.,
+              data = taprendizaje,
+              nrounds = 100,verbose = F)
+prediccion <- predict(modelo, ttesting , type = "class")
+mc <- confusion.matrix(ttesting,prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"xgboost"
+tabla.indices <- rbind(tabla.indices,metricas)
+general.indexes(mc=mc)
+```
+
+Los resultados si son muy buenos. Como podemos ver, la precision global esta por arriba del 95% en ambos casos o metodos, y en cada categoria tenemos mas del 90% de precision, sumando que tenemos muy poco error global. Son muy buenos resultados debido a eso. Puede ser que el metodo de arboles sea aun mejor que el de xgboost
+
+### 3.3
+
+```{r}
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(Numero~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("svm-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(Numero~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-paste("knn-", kernel)
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+```
+
+Se puede observar que el metodo de arboles es muy bueno en este caso, sin embargo, los metodos de knn o vecinos cercanos esta muy bien de precision y de error global. El mejor puede ser arboles aleatorios para este caso, ya que puede variar segun el caso.

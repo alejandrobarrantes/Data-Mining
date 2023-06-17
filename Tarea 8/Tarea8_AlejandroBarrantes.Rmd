@@ -1,0 +1,325 @@
+---
+title: "Tarea8_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-05-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+```
+
+# Ejercicio #1
+
+## 1.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+taprendizaje <- Datos[-indice, ]
+
+```
+
+## 1.2
+
+```{r}
+tabla.indices <- data.frame()
+
+# Con selección de variables
+modelo       <- train.rpart(tipo~ contraste + energia + homogeneidad,data = taprendizaje, minsplit=2)
+prediccion   <- predict(modelo, ttesting, type = 'class')
+mc           <- confusion.matrix(newdata = ttesting, prediccion)
+# Índices de Calidad de la predicción
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"rpart-seleccion"
+tabla.indices <- rbind(tabla.indices,metricas)
+
+#Grafico del arbol
+prp(modelo,extra=104,
+    branch.type=2, 
+    box.col=c("pink",
+              "palegreen3",
+              "cyan")[modelo$frame$yval])
+
+
+# Con todas las variables
+modelo <- train.rpart(formula = tipo~.,taprendizaje,minsplit = 2)
+prp(modelo,extra=104,
+    branch.type=2, 
+    box.col=c("pink",
+              "palegreen3",
+              "cyan")[modelo$frame$yval])
+
+
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"rpart-todas"
+tabla.indices <- rbind(tabla.indices,metricas)
+```
+
+## 1.3
+
+```{r}
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(tipo~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-kernel
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(tipo~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-kernel
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+
+# Definir los kernels que vamos a usar
+kernels <- c("linear", "radial", "polynomial","sigmoid","rectangular","triangular",
+  "epanechnikov","biweight","triweight","cos","inv","gaussian","optimal")
+
+# Generar modelos con diferentes kernels
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+```
+
+Como podemos observar, el mejor metodo es el de SVM, ya que obtenemos una precision global mayor a la de los otros metodos. En este caso el metodo de arbol de decision es bueno, sin embargo, los otros metodos siguen siendo mejores.
+
+# Ejercicio #2
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("titanicV2020.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+
+# Eliminamos las columnas PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked: 
+Datos <- subset(Datos, select = -c(PassengerId,Name,SibSp,Parch,Ticket, Cabin, Embarked))
+#omitimos nulos
+Datos<-na.omit(Datos)
+#recodificamos
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+```
+
+```{r}
+tam <- dim(Datos)
+n   <- tam[1]
+muestra      <- sample(1:n, floor(n*0.30))
+ttesting     <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+```
+
+```{r}
+tabla.indices <- data.frame()
+modelo       <- train.rpart(Survived~.,data = taprendizaje)
+prediccion   <- predict(modelo, ttesting, type = 'class')
+mc           <- confusion.matrix(newdata = ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = mc)
+metricas<- c((general.indexes(mc=mc)[c(-1,-4)]),(unlist(general.indexes(mc=mc)[4])))
+metricas$Modelo <-"rpart"
+tabla.indices <- rbind(tabla.indices,metricas)
+```
+
+```{r}
+prp(modelo,extra=104,
+    branch.type=2, 
+    box.col=c("pink",
+              "palegreen3",
+              "cyan")[modelo$frame$yval])
+```
+
+#### Con 3 variables
+
+```{r}
+
+modelo       <- train.rpart(Survived~ Sex + Age + Sex,data = taprendizaje)
+prp(modelo,extra=104,
+    branch.type=2, 
+    box.col=c("pink",
+              "palegreen3",
+              "cyan")[modelo$frame$yval])
+```
+
+```{r}
+# Función para generar modelos con diferentes kernels y almacenar los indices
+comparaciones.modelos <- function(kernels) {
+  
+  for (kernel in kernels) {
+    if(kernel=="linear" || kernel=="radial" || kernel=="polynomial" || kernel =="sigmoid"){
+      model <- train.svm(Survived~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-kernel
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }else{
+      model <- train.knn(Survived~., taprendizaje, kernel = kernel)
+      prediccion <- predict(model, ttesting, type = "class")
+      MC <- confusion.matrix(ttesting, prediccion)
+      metricas<- c((general.indexes(mc=MC)[c(-1,-4)]),(unlist(general.indexes(mc=MC)[4])))
+      metricas$Modelo <-kernel
+      tabla.indices <- rbind(tabla.indices,metricas)
+    }
+   
+  }
+  
+  return(tabla.indices)
+}
+
+
+# Definir los kernels que vamos a usar
+kernels <- c("linear", "radial", "polynomial","sigmoid","rectangular","triangular",
+  "epanechnikov","biweight","triweight","cos","inv","gaussian","optimal")
+
+# Generar modelos con diferentes kernels
+indices.comparacion <- comparaciones.modelos(kernels)
+
+indices.comparacion <- select(indices.comparacion, Modelo, everything())
+
+indices.comparacion
+
+```
+
+En este caso el mejor de todos los metodos es el arbol de decision o rpart. Esto se dbe a que tiene una precision global y por categoria mayor al de los otros metodos, por tanto se determina mejor. Ademas, tiene el error global mas bajo.
+
+# Ejercicio #3
+
+## 3.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.table("ZipData_2020.csv", header=TRUE, sep=';',dec='.', stringsAsFactors = T)
+```
+
+## 3.2
+
+```{r}
+set.seed(123)
+
+tam<-dim(Datos)
+n<-tam[1]
+muestra <- sample(1:n,floor(n*0.20))
+ttesting <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+
+modelo<-train.rpart(Numero~.,data=(taprendizaje))
+
+prediccion <- predict(modelo, ttesting, type = "class")
+MC<-confusion.matrix(ttesting, prediccion)
+general.indexes(mc=MC)
+```
+
+Los resultados no son los mejores, ya que se obtiene una precision global aproximada al 75%, ademas de que por categoria tambien obtenemos hasta menos de 70% de precision, muy pocas precisiones por categoria llegan al 90% , por lo que lo convierte en un modelo no tan bueno.
+
+## 3.3
+
+![Indices anteriores!](ej3.png)
+
+Como podemos observar en la tabla de comparaciones, el metodo SVM es mejor que el metodo rpart y KNN, ya que la precision global es mas alta, el error global es mas bajo, y la precision por categoria tambien es mas alta que en el modelo con KNN. En este caso el metodo de arbol de decision es bastante mas bajo que los otros metodos, dando al metodo SVM como el metodo con mejor resultado para este ejercicio
+
+# Ejercicio #4
+
+## 4.1
+
+```{r}
+
+# Usando Color como variable inicial:
+
+# Grupo 1 con Color Amarillo
+# Tipo 1 = 3 
+# Tipo 0 = 1 
+
+# Proporcion:
+# Tipo 1 = 3/4  
+# Tipo 0 = 1/4
+
+# Gini-Amarillo = 1 - (3/4)^2 - (1/4)^2 = 0.375
+
+#--------------------------------------
+
+# Grupo 2 con Color Azul
+
+# Tipo 1 = 1 
+# Tipo 0 = 6 
+
+# Proporcion:
+# Tipo 1 = 1/7  
+# Tipo 2 = 6/7
+
+# Gini-Azul = 1 - 1 - (1/7)^2 - (6/7)^2 = 0.245
+
+#---------
+
+#Gini-Split (4/11)*0.375 + (6/11)*0.245 =  0.27 
+
+#===============================================
+
+# Usando Tamaño como variable inicial:
+
+# Grupo 1 con Tamaño Grande:
+
+# Tipo 1 = 3 
+# Tipo 0 = 3 
+
+# Proporcion:
+# Tipo 1 = 3/6  
+# Tipo 0 = 3/6
+
+# Gini-Grande = 1 - (3/6)^2 - (3/6)^2 = 0.5
+
+#--------------------------------------
+
+# Grupo 1 con Tamaño pequeño
+
+# Tipo 1 = 2 
+# Tipo 0 = 3 
+
+# Proporcion:
+# Tipo 1 = 2/5  
+# Tipo 0 = 3/5
+
+# Gini-Grande = 1 - (2/5)^2 - (3/5)^2 = 0.59
+
+#---------
+
+#Gini-Split (6/11)*0.5 + (5/11)*0.59 =  0.541 
+
+#======================================
+
+#RESULTADO:
+#La falta de pureza es más pronunciada en la clase "TAMAÑO", lo que indica que la división óptima por "COLOR" será beneficiosa debido a su menor nivel de impureza, tal como se refleja en el índice de GINI.
+
+```
+
+## 4.2
+
+![Arbol de decision!](ej4.png)

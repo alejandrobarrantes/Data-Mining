@@ -1,0 +1,562 @@
+---
+title: "Tarea6_ALejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR") 
+library("factoextra")
+library("cluster")
+library("fmsb")
+library(traineR)
+library(dplyr)
+library(ggplot2)
+
+indices.general <- function(MC) {
+  precision.global <- sum(diag(MC))/sum(MC)
+  error.global <- 1 - precision.global
+  precision.categoria <- diag(MC)/rowSums(MC)
+  res <- list(matriz.confusion = MC, precision.global = precision.global, error.global = error.global, 
+              precision.categoria = precision.categoria)
+  names(res) <- c("Matriz de Confusión", "Precisión Global", "Error Global", 
+                  "Precisión por categoría")
+  return(res)
+}
+
+#Colores de ggplot2
+define.colores <- function(n) {
+  hues <- seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}  
+
+#Calcula proporciones
+dist.x.predecir <- function(data, variable, variable.predecir) {
+  data. <- data %>%
+    group_by_(variable, variable.predecir) %>%
+    summarise(count = n()) %>%
+    mutate(prop = round(count/sum(count),4))
+  return(data.)
+}
+
+equilibrio.variable.predecir <- function(datos, variable.predecir, ylab = "Cantidad de individuos", 
+                                        xlab = "", main = paste("Distribución de la variable",variable.predecir), col = NA) {
+  gg_color <- function (n) {
+     hues <- seq(15, 375, length = n + 1)
+     hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  if(missing(variable.predecir) | !(variable.predecir %in% colnames(datos))){
+    stop("variable.predecir tiene que ser ingresada y ser un nombre de columna", call. = FALSE )
+  }
+  if(is.character(datos[,variable.predecir]) | is.factor(datos[,variable.predecir])){
+    if(length(col) == 0 || is.na(col)){
+      col <- gg_color(length(unique(datos[,variable.predecir])))
+    }else{
+      col <- rep(col,length(unique(datos[,variable.predecir])))
+    }
+    ggplot(data = datos, mapping = aes_string(x = variable.predecir, fill = variable.predecir)) +
+      geom_bar() +
+      scale_fill_manual(values = col, name = variable.predecir) +
+      labs(x = xlab, y = ylab, title = main) +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+  }else{
+    stop("La variable a predecir tienen que ser de tipo factor o character", call. = FALSE )
+  }
+}
+
+poder.predictivo.numerica <- function(datos, variable.predecir, variable.comparar, ylab = "", 
+                                       xlab = "", main = paste("Densidad de la variable", variable.comparar, 'según', variable.predecir), col = NA){
+  gg_color <- function (n) {
+     hues <- seq(15, 375, length = n + 1)
+     hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  if(missing(variable.predecir) | !(variable.predecir %in% colnames(datos))){
+    stop("variable.predecir tiene que ser ingresada y ser un nombre de columna", call. = FALSE )
+  }
+  if(missing(variable.comparar) | !(variable.comparar %in% colnames(datos)) | !is.numeric(datos[,variable.comparar])){
+    stop("variable.comparar tiene que ser ingresada y ser un nombre de columna numérica", call. = FALSE )
+  }
+  
+  if(is.character(datos[,variable.predecir]) | is.factor(datos[,variable.predecir])){
+    if(length(col) == 0 || is.na(col)){
+      col <- gg_color(length(unique(datos[,variable.predecir])))
+    }else{
+      col <- rep(col,length(unique(datos[,variable.predecir])))
+    }
+    
+    ggplot(data = datos, aes_string(variable.comparar, fill = variable.predecir)) +
+      geom_density(alpha = .7, color = NA) +
+      scale_fill_manual(values = col) +
+      labs(title = main , y = ylab, x = xlab ,fill = variable.predecir) +
+      theme_minimal() +
+      theme(legend.position = 'bottom',
+            legend.title = element_blank(),
+            text = element_text(size = 15))
+    
+  }else{
+    stop("La variable a predecir tienen que ser de tipo factor o character", call. = FALSE )
+  }
+}
+
+poder.predictivo.categorica <- function(datos, variable.predecir, variable.comparar, ylab = "", 
+                                        xlab = "", main = paste("Densidad de la variable", variable.comparar, 'según', variable.predecir), col = NA) {
+  gg_color <- function (n) {
+     hues <- seq(15, 375, length = n + 1)
+     hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  if(missing(variable.predecir) | !(variable.predecir %in% colnames(datos))){
+    stop("variable.predecir tiene que ser ingresada y ser un nombre de columna", call. = FALSE )
+  }
+  if(missing(variable.comparar) | !(variable.comparar %in% colnames(datos)) | 
+     !(is.factor(datos[,variable.comparar]) | is.character(datos[,variable.comparar])) ){
+    stop("variable.comparar tiene que ser ingresada y ser un nombre de columna categórica", call. = FALSE )
+  }
+  
+  if(is.character(datos[,variable.predecir]) | is.factor(datos[,variable.predecir])){
+    if(length(col) == 0 || is.na(col)){
+      col <- gg_color(length(unique(datos[,variable.predecir])))
+    }else{
+      col <- rep(col,length(unique(datos[,variable.predecir])))
+    }
+    
+    datos2 <- datos %>%
+      dplyr::group_by_(variable.comparar, variable.predecir) %>%
+      dplyr::summarise(count = n())
+    
+    if(variable.comparar != variable.predecir){
+      datos2 <-   datos2 %>% dplyr::group_by_(variable.comparar)
+    }
+    datos2 <- datos2 %>% dplyr::mutate(prop = round(count/sum(count),4))
+  
+    ggplot(data = datos2, mapping = aes_string(x = variable.comparar, y = "prop", fill = variable.predecir)) +
+      geom_col(position = "fill") +
+      geom_text(aes(label = glue("{percent(prop)} ({count})")), position = position_stack(vjust = .5), color = "white") +
+      scale_y_continuous(label = percent) +
+      labs(y =  xlab, x  = ylab, title = main) +
+      scale_fill_manual(values = col, name = variable.predecir) +
+      theme(legend.position = "bottom")+
+      coord_flip()
+    
+  }else{
+    stop("La variable a predecir tienen que ser de tipo factor o character", call. = FALSE )
+  }
+}
+# Índices para matrices NxN
+indices.general <- function(MC) {
+  precision.global <- sum(diag(MC))/sum(MC)
+  error.global <- 1 - precision.global
+  precision.categoria <- diag(MC)/rowSums(MC)
+  res <- list(matriz.confusion = MC, precision.global = precision.global, error.global = error.global, 
+              precision.categoria = precision.categoria)
+  names(res) <- c("Matriz de Confusión", "Precisión Global", "Error Global", 
+                  "Precisión por categoría")
+  return(res)
+}
+
+```
+
+# EJERCICIO #1
+
+```{r}
+#|    MC             |             | Modelo        | Modelo       |
+#|-------------------|-------------|---------------|--------------|
+#|                   | Matriz      | NO            | SI           |
+#| REAL              | NO          | 4 (VN)        | 3  (FP)      |
+#| REAL              | SI          | 2 (FN)        | 16 (VP)      |
+```
+
+```{r}
+VN<-4
+FN<-2
+FP<-3
+VP<-16
+
+print("Precision global:")
+P<-(VN+VP)/(VN+FP+FN+VP)
+P
+print("Error global: ") 
+E<-(1-P)
+E
+print("Precisión positiva:")
+PP<- VP/(FN+VP)
+PP
+print("Precisión negativa:")
+PN<-VN/(VN+FP)
+PN
+print("Proporción de falsos positivos:")
+PFP<- FP/(VN+FP)
+PFP
+print("Proporción de falsos negativos:")
+PFN<-FN/(FN+VP)
+PFN
+print("Asertividad positiva:")
+AP <- VP/(FP+VP) 
+AP
+print("Asertividad negativa:") 
+AN <- VN/(VN+FN)
+AN
+```
+
+# EJERCICIO #2
+
+```{r}
+calcular_metricas <- function(MC) {
+  
+  VN <- MC[1,1]  
+  FN <- MC[2,1] 
+  FP <- MC[1,2]  
+  VP <- MC[2,2]  
+  
+  # Calcular las métricas de rendimiento
+  PG <- (VN+VP)/(VN+FP+FN+VP)
+  EG <- 1 - PG
+  PP <- VP/(FN+VP)
+  PN <- VN/(VN+FP)
+  falsos_positivos <- FP/(VN+FP)
+  falsos_negativos <- FN/(FN+VP)
+  AP <- VP/(FP+VP)
+  AN <- VN/(VN+FN)
+  
+  metricas <- list(precision_global = PG,
+                   error_global = EG,
+                   precision_positiva = PP,
+                   precision_negativa = PN,
+                   falsos_positivos = falsos_positivos,
+                   falsos_negativos = falsos_negativos,
+                   asertividad_positiva = AP,
+                   asertividad_negativa = AN)
+  
+  return(metricas)
+}
+
+matriz_confusion <- matrix(c(892254, 212, 8993, 300), nrow=2, byrow=TRUE)
+matriz_confusion
+metricas <- calcular_metricas(matriz_confusion)
+metricas
+
+# 
+
+```
+
+El modelo predictivo tiene una precision global del 98%, lo que significa que esta muy acercado a la realidad, por lo tanto se puede decir que es un modelo extremadamente confiable y bueno. Eso si miramos la precision global, sin embargo, la asertividad positiva es bastante baja, lo que significa que los valores "Si" en el real y "Si" en el modelo no han sido precisamente adivinados en su totalidad. Ademas en la asertividad negativa si es bastante precisa.
+
+# EJERCICIO #3
+
+## 3.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 6/Datos Clase y Tareas")
+Datos <- read.table("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+
+Datos$tipo <- factor(Datos$tipo)
+
+numero.filas <- nrow(Datos)
+muestra <- sample(1:numero.filas,numero.filas*0.25)
+ttesting <- Datos[muestra, ]
+taprendizaje <- Datos[-muestra, ]
+
+modelo<-train.knn(tipo~.,data=taprendizaje,kmax=floor(sqrt(numero.filas)))
+modelo
+```
+
+## 3.2
+
+```{r}
+
+#==========================================================================
+lista_resultados <- list()
+#Rectangular
+modelo.rectangular<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "rectangular")
+
+#Prediccion 
+prediccion <- predict(modelo.rectangular, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["rectangular"]]<-general.indexes(mc = MC)$category.accuracy[2]
+
+#==========================================================================
+#Triangular
+modelo.triangular<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "triangular")
+
+#Prediccion 
+prediccion <- predict(modelo.triangular, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["triangular"]]<-general.indexes(mc = MC)$category.accuracy[2]
+
+#==========================================================================
+#Epanechnikov
+modelo.epanechnikov<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "epanechnikov")
+#Prediccion 
+prediccion <- predict(modelo.epanechnikov, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["epanechnikov"]]<-general.indexes(mc = MC)$category.accuracy[2]
+#==========================================================================
+#Biweight
+modelo.biweight<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "biweight")
+
+#Prediccion 
+prediccion <- predict(modelo.biweight, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["biweight"]]<-general.indexes(mc = MC)$category.accuracy[2]
+#==========================================================================
+#Triweight
+modelo.triweight<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "triweight")
+
+#Prediccion 
+prediccion <- predict(modelo.triweight, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["triweight"]]<-general.indexes(mc = MC)$category.accuracy[2]
+#==========================================================================
+#Cos
+modelo.cos<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "cos")
+
+#Prediccion 
+prediccion <- predict(modelo.cos, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["cos"]]<-general.indexes(mc = MC)$category.accuracy[2]
+
+#==========================================================================
+#Inv
+modelo.inv<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "inv")
+
+#Prediccion 
+prediccion <- predict(modelo.inv, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["Inv"]]<-general.indexes(mc = MC)$category.accuracy[2]
+
+#==========================================================================
+#Gaussian
+modelo.gaussian<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "gaussian")
+
+#Prediccion 
+prediccion <- predict(modelo.gaussian, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["Gaussian"]]<-general.indexes(mc = MC)$category.accuracy[2]
+#==========================================================================
+#Optimal
+modelo.optimal<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "optimal")
+
+#Prediccion 
+prediccion <- predict(modelo.optimal, ttesting, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+lista_resultados[["optimal"]]<-general.indexes(mc = MC)$category.accuracy[2]
+
+lista_resultados
+```
+
+**Los mejores resultados donde se predice mejor tumor = 1, se producen al usar los núcleos Cos, Optimal, Triagular. Esto es debido a que la precision que tienen estos modelos es un poco mas alta que los otros, ademas de que superan el 95% de precision.**
+
+# EJERCICIO #4
+
+### 4.1
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 6/Datos Clase y Tareas")
+datos <- read.csv("titanicV2020.csv", header=TRUE, sep=",")
+
+datos$Survived <- factor(datos$Survived)
+datos$Pclass <- factor(datos$Pclass)
+datos$Sex <- factor(datos$Sex)
+datos$Embarked <- factor(datos$Embarked)
+
+
+datos <- datos[,c("Survived", "Pclass", "Sex", "Age", "SibSp", "Parch", "Fare", "Embarked")]
+```
+
+### 4.2
+
+```{r}
+# Resumen numérico
+summary(datos)
+
+# Boxplot de las variables numéricas
+boxplot(datos[,c("Age","SibSp","Parch","Fare")], main="Boxplot de Variables Numéricas")
+
+# Correlación entre variables
+cor(datos[,c("Age","SibSp","Parch","Fare")])
+
+# Gráfico de barras de la variable categórica Pclass
+
+ggplot(datos, aes(x=Pclass, fill=Survived)) +
+  geom_bar(position="dodge")
+
+# Gráfico de barras de la variable categórica Sex
+ggplot(datos, aes(x=Sex, fill=Survived)) +
+  geom_bar(position="dodge")
+
+# Gráfico de barras de la variable categórica Embarked
+ggplot(datos, aes(x=Embarked, fill=Survived)) +
+  geom_bar(position="dodge")
+```
+
+### 4.3
+
+```{r}
+table(datos$Survived)
+```
+
+**Esta desequilibrado ya que la proporcion de los que sobrevivieron es menor a la de los que sobrevivieron y esto puede afectar en el resultado del modelo a la hora de utilizarlo para predecir, ya que talves va a predecir mas los que sobrevivieron que los que no sorevivieron**
+
+### 4.4
+
+```{r}
+muestra <- sample(nrow(datos), 0.8 * nrow(datos))
+
+taprendizaje <- datos[muestra,]
+ttesting <- datos[-muestra,]
+
+
+taprendizaje <- na.omit(taprendizaje)
+ttesting <- na.omit(ttesting)
+
+modelo1<-train.knn(Survived~.,data=taprendizaje)
+prediccion <- predict(modelo1, ttesting, type = "class")
+
+MC1 <- confusion.matrix(ttesting, prediccion)
+general.indexes(mc = MC1)
+```
+
+**Segun la matriz de confusion, obtenemos un 83% de precision global, lo que termina siendo bueno, tenemos la precision por categoria donde la precision con los que no sobreviieron es bastante buena, y la de los que sobrevivieron es bastante buena tambien, sin embargo, no llega a ser tan alta**
+
+### 4.5
+
+```{r}
+taprendizaje <- datos[muestra,]
+ttesting <- datos[-muestra,]
+
+taprendizaje <- na.omit(taprendizaje)
+ttesting <- na.omit(ttesting)
+
+modelo2<-train.knn(Survived~Sex+Age+Fare+Pclass+Embarked,data=taprendizaje)
+
+prediccion <- predict(modelo2, ttesting, type = "class")
+
+MC2 <- confusion.matrix(ttesting, prediccion)
+general.indexes(mc = MC2)
+
+```
+
+**Los resultados no mejoran mucho, sin embargo quedan muy similares, por lo tanto, se podria decir que se obtiene un resultado similar sin necesidad de utilizar todas las variables. Pero si utilizamos todas las variables, existe la posibilidad de mejorar mas la prediccion.**
+
+### 4.6
+
+```{r}
+modelos<-list()
+modelos[["Modelo1"]]<-modelo1
+modelos[["Modelo2"]]<-modelo2
+resultados <- data.frame(Modelo = character(),
+                          Precisión_Global = numeric(),
+                          Error_Global = numeric(),
+                         Falsos_Positivos = numeric(),
+                          Falsos_Negativos = numeric(),
+                          Precisión_Positiva = numeric(),
+                          Precisión_Negativa = numeric(),
+                         Asertividad_Positiva = numeric(),
+                          Asertividad_Negativa = numeric(),
+                          stringsAsFactors = FALSE)
+
+
+for (nombre_modelo in names(modelos)) {
+  modelo <- modelos[[nombre_modelo]]
+  prediccion <- predict(modelo, newdata = ttesting, type = "class")
+  matriz_confusion <- confusion.matrix(ttesting, prediccion)
+  VN<-matriz_confusion[1,1]
+  FN<-matriz_confusion[2,1]
+  FP<-matriz_confusion[1,2]
+  VP<-matriz_confusion[2,2]
+
+  #("Precision global:")
+  P<-(VN+VP)/(VN+FP+FN+VP)
+  #("Error global: ") 
+  E<-(1-P)
+  #("Precisión positiva:")
+  PP<- VP/(FN+VP)
+  #("Precisión negativa:")
+  PN<-VN/(VN+FP)
+  #("Asertividad positiva:")
+  AP <- VP/(FP+VP) 
+  #("Asertividad negativa:") 
+  AN <- VN/(VN+FN)
+  
+  indices.generales<-general.indexes(mc=matriz_confusion)
+  
+  if (!nombre_modelo %in% resultados$Modelo){
+        nueva_fila <- data.frame(Modelo = nombre_modelo,
+                            Precisión_Global = indices.generales$overall.accuracy,
+                            Error_Global = indices.generales$overall.error,
+                            Precisión_Positiva = PP,
+                            Precisión_Negativa = PN,
+                            Falsos_Positivos = matriz_confusion[1,2],
+                            Falsos_Negativos = matriz_confusion[2,1],
+                             Asertividad_Positiva = AP,
+                            Asertividad_Negativa = AN
+                            )
+  
+      resultados <- rbind(resultados, nueva_fila)
+  }
+}
+resultados <- distinct(resultados, Modelo, .keep_all = TRUE)
+resultados
+
+```
+
+Los resultados en ambos son bastantes similares, y pueden cambiar dependiendo de cuantas veces se corren, por tanto no se podria decir cual es mejor, sin embargo apreciando los resultados nos podriamos inclinar por algun modelo, el de mejor precision global
+
+# EJERCICIO #5
+
+### 5.1
+
+```{r}
+#5.1
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 6/Datos Clase y Tareas")
+Datos <- read.table("ZipData_2020.csv", header=TRUE, sep=';',dec='.', stringsAsFactors = T)
+```
+
+### 5.2
+
+```{r}
+#5.2
+table(Datos$Numero)
+```
+
+**Si es equilibrado, ya que tenemos cantidades parecidas de cada categoria**
+
+### 5.3
+
+```{r}
+#5.3
+tam<-dim(Datos)
+n<-tam[1]
+muestra <- sample(1:n,floor(n*0.20))
+ttesting <- Datos[muestra,]
+taprendizaje <- Datos[-muestra,]
+
+# train.kknn escoje el k usando leave-one-out crossvalidation
+modelo<-train.knn(Numero~.,data=(taprendizaje),kmax=floor(sqrt(n)))
+
+prediccion <- predict(modelo, ttesting, type = "class")
+MC<-confusion.matrix(ttesting, prediccion)
+general.indexes(mc=MC)
+```
+
+**Se obtiene una precision del 95%, lo que significa que** **los resultados son muy buenos, ademas de que en los resultados de precision por categoria se mantienen arriba del 90%, lo cual es muy buen** **numero**

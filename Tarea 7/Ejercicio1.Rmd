@@ -1,0 +1,282 @@
+---
+title: "Tarea7_Joaquin_Garcia"
+author: "Joaquin Garcia"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerias
+
+```{r}
+library(caret)
+suppressWarnings(library(traineR))
+setwd("C:/Users/jjgr2/OneDrive/Escritorio/Semestre I/Mineria de Datos/Tarea7")
+```
+
+# Pregunta #1
+
+## Pregunta 1.1
+
+```{r}
+# Cargar archivo CSV
+
+tumores <- read.csv('tumores.csv', header=TRUE, sep=',',dec = '.',stringsAsFactors = T)
+
+tumores$tipo <- factor(tumores$tipo)
+
+# Dividir en conjunto de aprendizaje y conjunto de prueba
+set.seed(123) # establecer semilla para reproducibilidad
+indices <- createDataPartition(tumores$tipo, p = 0.75, list = FALSE)
+aprendizaje <- tumores[indices, ]
+prueba <- tumores[-indices, ]
+```
+
+## Pregunta 1.2
+
+### Linear
+
+```{r}
+# Entrenar modelo
+modeloLinear <- train.svm(tipo ~ ., data = aprendizaje, kernel = "linear")
+# Realizar predicciones
+prediccionLinear <- predict(modeloLinear, prueba, type = "class")
+# Matriz de confusión
+mcLinear <- confusion.matrix(prueba, prediccionLinear)
+# Índices generales
+indexLinear <- general.indexes(mc = mcLinear)
+indexLinear
+
+accuracies.svm <- list()
+accuracies.svm$linear <- indexLinear$category.accuracy[2][[1]]
+
+
+
+```
+
+### Radial
+
+```{r}
+# Entrenar modelo
+modeloRadial <- train.svm(tipo ~ ., data = aprendizaje, kernel = "radial")
+# Realizar predicciones
+prediccionRadial <- predict(modeloRadial, prueba, type = "class")
+# Matriz de confusión
+mcRadial <- confusion.matrix(prueba, prediccionRadial)
+# Índices generales
+indexRadial <- general.indexes(mc = mcRadial)
+indexRadial
+accuracies.svm$radial <- indexRadial$category.accuracy[2][[1]]
+
+```
+
+### Plynomial
+
+```{r}
+# Entrenar modelo
+modeloPoly <- train.svm(tipo ~ ., data = aprendizaje, kernel = "polynomial")
+# Realizar predicciones
+prediccionPoly <- predict(modeloPoly, prueba, type = "class")
+# Matriz de confusión
+mcPoly <- confusion.matrix(prueba, prediccionPoly)
+# Índices generales
+indexPoly <- general.indexes(mc = mcPoly)
+indexPoly
+accuracies.svm$poly <- indexPoly$category.accuracy[2][[1]]
+```
+
+### Sigmoid
+
+```{r}
+# Entrenar modelo
+modeloSigmoid <- train.svm(tipo ~ ., data = aprendizaje, kernel = "sigmoid")
+# Realizar predicciones
+prediccionSigmoid <- predict(modeloSigmoid, prueba, type = "class")
+# Matriz de confusión
+mcSigmoid <- confusion.matrix(prueba, prediccionSigmoid)
+# Índices generales
+indexSigmoid <- general.indexes(mc = mcSigmoid)
+indexSigmoid
+accuracies.svm$sigmoid <- indexSigmoid$category.accuracy[2][[1]]
+```
+
+## Ajuste de Train.knn para 1.3
+
+```{r}
+kmax <- floor(sqrt(nrow(tumores))) 
+#Rectangular
+modelo.rectangular<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "rectangular")
+modelo.rectangular
+
+#Prediccion 
+prediccion <- predict(modelo.rectangular, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn <- list()
+accuracies.knn$rectangular <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+#Triangular
+modelo.triangular<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "triangular")
+modelo.triangular
+
+#Prediccion 
+prediccion <- predict(modelo.triangular, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$triangular <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+
+#Epanechnikov
+modelo.epanechnikov<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "epanechnikov")
+modelo.epanechnikov
+#Prediccion 
+prediccion <- predict(modelo.epanechnikov, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Epanechnikov <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+
+#Biweight
+modelo.biweight<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "biweight")
+modelo.biweight
+
+#Prediccion 
+prediccion <- predict(modelo.biweight, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Biweight <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+
+#Triweight
+modelo.triweight<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "triweight")
+modelo.triweight
+
+#Prediccion 
+prediccion <- predict(modelo.rectangular, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Triweight <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+
+#Cos
+modelo.cos<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "cos")
+modelo.cos
+
+#Prediccion 
+prediccion <- predict(modelo.cos, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Cos <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+
+#Inv
+modelo.inv<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "inv")
+modelo.inv
+
+#Prediccion 
+prediccion <- predict(modelo.inv, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Inv <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+
+
+#Gaussian
+modelo.gaussian<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "gaussian")
+modelo.gaussian
+
+#Prediccion 
+prediccion <- predict(modelo.gaussian, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Gaussian <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+
+#Optimal
+modelo.optimal<- train.knn(tipo~., data = aprendizaje, kmax=kmax, kernel = "optimal")
+modelo.optimal
+
+#Prediccion 
+prediccion <- predict(modelo.optimal, prueba, type = "class")
+
+#Matriz de confusion
+MC <- confusion.matrix(prueba, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+accuracies.knn$Optimal <- general.indexes(mc = MC)$category.accuracy[2][[1]]
+
+```
+
+## Pregunta 1.3
+
+### Primer Caso
+
+Train.knn (rectangular, triangular, epanechnikov, biweight, triweight, cos, inv, gaussian y optimal)
+
+```{r}
+accuracies.knn
+max_acc <- max(unlist(accuracies.knn))
+max_idxs <- which(unlist(accuracies.knn) == max_acc)
+max_names <- names(accuracies.knn)[max_idxs]
+print(paste("Los siguientes modelos tienen la precisión máxima:", paste(max_names, collapse = ", ")))
+```
+
+### Segundo Caso
+
+Train.svm (linear radial polynomial sigmoid)
+
+```{r}
+accuracies.svm
+max_acc <- max(unlist(accuracies.svm))
+max_idxs <- which(unlist(accuracies.svm) == max_acc)
+max_names <- names(accuracies.svm)[max_idxs]
+print(paste("Los siguientes modelos tienen la precisión máxima:", paste(max_names, collapse = ", ")))
+
+```
+
+### Resolucion Pregunta 1.3
+
+Como se puede apreciar los resultados de Maquinas de Soporte Vectorial con los nucleos adecuados (linear radial polynomial sigmoid) tiene mejores resultados de los que K Vecinos mas cerca (rectangular, triangular, epanechnikov, biweight, triweight, cos, inv, gaussian y optimal). Dandonos una respuesta clara a lo que buscamos el mejor metodo.

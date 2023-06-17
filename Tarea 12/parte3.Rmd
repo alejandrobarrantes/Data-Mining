@@ -1,0 +1,622 @@
+---
+title: "parte3"
+author: "Alejandro Barrantes Castro"
+date: "2023-06-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(snow)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+# Funciones Generales
+
+```{r funciones}
+precision<-function(clase){
+  function(mc){
+    indices=general.indexes(mc=mc)
+    indices$category.accuracy[clase]
+  }
+}
+
+precision.global<-function(x) sum(diag(x))/sum(x)
+
+error.global <- function(x) 1 - sum(diag(x))/sum(x)
+```
+
+# Ejercicio #3
+
+# Lectura de Datos
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+```
+
+# 3.1 Deteccion de 1's
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+
+ejecutar.prediccion <- function(datos, formula, muestra, metodo, ...) {
+  ttesting <- datos[muestra, ]
+  ttraining <- datos[-muestra, ]
+  modelo <- do.call(metodo, list(formula, data = ttraining, ...))
+  prediccion <- predict(modelo, ttesting, type = "class")
+  MC <- confusion.matrix(ttesting, prediccion)
+  return(MC)
+}
+
+# La siguiente función permite fijar parámetros específicos para cada método, lo cual es útil para usar otros parámetros que no sean los default.
+
+ejecutar.prediccion.particular <- function(datos, formula, muestra, metodo) {
+  if(metodo == "train.svm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.knn"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo,kernel="optimal", kmax = tam))}
+  if(metodo == "train.bayes"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.rpart"){
+    return(ejecutar.prediccion(datos, tipo~ contraste + energia + homogeneidad, muestra, metodo))}
+  if(metodo == "train.randomForest"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, importance = TRUE))}
+  if(metodo == "train.ada"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, iter = 500, type = "gentle"))}
+  if(metodo == "train.nnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE))}
+  if(metodo == "train.xgboost"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, nrounds = 500))}
+  if(metodo == "train.glm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.neuralnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, hidden = c(8,6,4), linear.output = FALSE))}
+}
+
+# Constructor del cluster
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+metodos <- c("train.svm", "train.knn", "train.bayes", "train.rpart", "train.randomForest", "train.ada", "train.nnet",
+             "train.xgboost", "train.neuralnet", "train.glm")
+
+tam <- floor(sqrt(nrow(Datos))) 
+clusterExport(clp, "tam")
+
+deteccion.si.svm <- c()
+deteccion.si.knn <- c()
+deteccion.si.bayes <- c()
+deteccion.si.arbol <- c()
+deteccion.si.bosque <- c()
+deteccion.si.potenciacion <- c()
+deteccion.si.red <- c()
+deteccion.si.xgboost <- c()
+deteccion.si.red.neu <- c()
+deteccion.si.glm <- c()
+
+# Exportamos paquetes a los procesadores
+ignore <- clusterEvalQ(clp, {
+  library(dplyr)
+  library(traineR)
+  
+  return(NULL)
+})
+
+# Exportamos los datos y las funciones a los procesadores
+clusterExport(clp, list("Datos", "ejecutar.prediccion", "ejecutar.prediccion.particular"))
+
+tiempo.paralelo <- Sys.time()
+
+# Validación cruzada 5 veces
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  si.svm <- 0
+  si.knn <- 0
+  si.bayes <- 0
+  si.arbol <- 0
+  si.bosque <- 0
+  si.potenciacion <- 0
+  si.red <- 0
+  si.xg  <- 0
+  si.red.neu <- 0
+  si.glm <- 0
+  
+  # Este ciclo es el que hace validación cruzada con 10 grupos
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    # Exportamos la muestra a los procesadores
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, metodos, function(metodo) {
+     tryCatch({
+        MC <- ejecutar.prediccion.particular(datos = Datos, formula = tipo ~ ., muestra = muestra, metodo              = metodo)
+        si.val <- MC[2, 2]
+        valores <- list(Tipo = metodo, Resultado = si.val)
+        return(valores)
+      }, error = function(e) {
+        return(list(Error = as.character(e)))
+      })
+    })
+    
+    for (j in seq_along(metodos)) {
+      if (resultado[[j]][[1]] == "train.svm")
+        si.svm <- si.svm + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.knn")
+        si.knn <- si.knn + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.bayes")
+        si.bayes <- si.bayes + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.rpart")
+        si.arbol <- si.arbol + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.randomForest")
+        si.bosque <- si.bosque + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.ada")
+        si.potenciacion <- si.potenciacion + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.nnet")
+        si.red <- si.red + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.xgboost")
+        si.xg <- si.xg + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.neuralnet")
+        si.red.neu <- si.red.neu + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.glm")
+        si.glm <- si.glm + resultado[[j]][[2]]
+    }
+    
+  }
+  deteccion.si.svm[i] <- si.svm
+  deteccion.si.knn[i] <- si.knn
+  deteccion.si.bayes[i] <- si.bayes
+  deteccion.si.arbol[i] <- si.arbol
+  deteccion.si.bosque[i] <- si.bosque
+  deteccion.si.potenciacion[i] <- si.potenciacion
+  deteccion.si.red[i] <- si.red
+  deteccion.si.xgboost[i] <- si.xg
+  deteccion.si.red.neu[i] <- si.red.neu
+  deteccion.si.glm[i] <- si.glm
+}
+
+stopCluster(clp)
+
+tiempo.paralelo <- Sys.time() - tiempo.paralelo
+
+
+# GRAFICACION
+resultados <- data.frame("svm" = deteccion.si.svm,
+                         "k_vecinos" = deteccion.si.knn,
+                         "bayes" = deteccion.si.bayes,
+                         "arboles" = deteccion.si.arbol,
+                         "bosques" = deteccion.si.bosque,
+                         "potenciacion" = deteccion.si.potenciacion,
+                         "redes_nnet" = deteccion.si.red,
+                         "xgboost" = deteccion.si.xgboost,
+                         "redes_neuralnet" = deteccion.si.red.neu, 
+                         "regresion_logistica" = deteccion.si.glm)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Deteccion de los 1's detectados", 
+        xlab = "Numero de iteracion",
+        ylab = "Cantidad de 1's detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+```{r}
+resultados
+```
+
+##### Es casi imposible determinar el mejor ya que todos han estado bastante bien y muy similares.
+
+# 3.2 Deteccion de Error global
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+
+ejecutar.prediccion <- function(datos, formula, muestra, metodo, ...) {
+  ttesting <- datos[muestra, ]
+  ttraining <- datos[-muestra, ]
+  modelo <- do.call(metodo, list(formula, data = ttraining, ...))
+  prediccion <- predict(modelo, ttesting, type = "class")
+  MC <- confusion.matrix(ttesting, prediccion)
+  return(MC)
+}
+
+# La siguiente función permite fijar parámetros específicos para cada método, lo cual es útil para usar otros parámetros que no sean los default.
+
+ejecutar.prediccion.particular <- function(datos, formula, muestra, metodo) {
+  if(metodo == "train.svm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.knn"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo,kernel="optimal", kmax = tam))}
+  if(metodo == "train.bayes"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.rpart"){
+    return(ejecutar.prediccion(datos, tipo~ contraste + energia + homogeneidad, muestra, metodo))}
+  if(metodo == "train.randomForest"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, importance = TRUE))}
+  if(metodo == "train.ada"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, iter = 500, type = "gentle"))}
+  if(metodo == "train.nnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE))}
+  if(metodo == "train.xgboost"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, nrounds = 500))}
+  if(metodo == "train.glm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.neuralnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, hidden = c(8,6,4), linear.output = FALSE))}
+}
+
+# Constructor del cluster
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+metodos <- c("train.svm", "train.knn", "train.bayes", "train.rpart", "train.randomForest", "train.ada", "train.nnet",
+             "train.xgboost", "train.neuralnet", "train.glm")
+
+tam <- floor(sqrt(nrow(Datos))) 
+clusterExport(clp, "tam")
+
+deteccion.error.svm <- c()
+deteccion.error.knn <- c()
+deteccion.error.bayes <- c()
+deteccion.error.arbol <- c()
+deteccion.error.bosque <- c()
+deteccion.error.potenciacion <- c()
+deteccion.error.red <- c()
+deteccion.error.xgboost <- c()
+deteccion.error.red.neu <- c()
+deteccion.error.glm <- c()
+
+# Exportamos paquetes a los procesadores
+ignore <- clusterEvalQ(clp, {
+  library(dplyr)
+  library(traineR)
+  
+  return(NULL)
+})
+
+# Exportamos los datos y las funciones a los procesadores
+clusterExport(clp, list("Datos", "ejecutar.prediccion", "ejecutar.prediccion.particular"))
+
+tiempo.paralelo <- Sys.time()
+
+# Validación cruzada 5 veces
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  error.svm <- 0
+  error.knn <- 0
+  error.bayes <- 0
+  error.arbol <- 0
+  error.bosque <- 0
+  error.potenciacion <- 0
+  error.red <- 0
+  error.xg  <- 0
+  error.red.neu <- 0
+  error.glm <- 0
+  
+  # Este ciclo es el que hace validación cruzada con 10 grupos
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    # Exportamos la muestra a los procesadores
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, metodos, function(metodo) {
+     tryCatch({
+        MC <- ejecutar.prediccion.particular(datos = Datos, formula = tipo ~ ., muestra = muestra, metodo              = metodo)
+        error.val <- (1-(sum(diag(MC)))/sum(MC))*100
+        valores <- list(Tipo = metodo, Resultado = error.val)
+        return(valores)
+      }, error = function(e) {
+        return(list(Error = as.character(e)))
+      })
+    })
+    
+    for (j in seq_along(metodos)) {
+      if (resultado[[j]][[1]] == "train.svm")
+        error.svm <- error.svm + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.knn")
+        error.knn <- error.knn + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.bayes")
+        error.bayes <- error.bayes + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.rpart")
+        error.arbol <- error.arbol + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.randomForest")
+        error.bosque <- error.bosque + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.ada")
+        error.potenciacion <- error.potenciacion + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.nnet")
+        error.red <- error.red + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.xgboost")
+        error.xg <- error.xg + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.neuralnet")
+        error.red.neu <- error.red.neu + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.glm")
+        error.glm <- error.glm + resultado[[j]][[2]]
+    }
+    
+  }
+  deteccion.error.svm[i] <- error.svm/ cantidad.grupos
+  deteccion.error.knn[i] <- error.knn/ cantidad.grupos
+  deteccion.error.bayes[i] <- error.bayes/ cantidad.grupos
+  deteccion.error.arbol[i] <- error.arbol/ cantidad.grupos
+  deteccion.error.bosque[i] <- error.bosque/ cantidad.grupos
+  deteccion.error.potenciacion[i] <- error.potenciacion/ cantidad.grupos
+  deteccion.error.red[i] <- error.red/ cantidad.grupos
+  deteccion.error.xgboost[i] <- error.xg/ cantidad.grupos
+  deteccion.error.red.neu[i] <- error.red.neu/ cantidad.grupos
+  deteccion.error.glm[i] <- error.glm/ cantidad.grupos
+}
+
+stopCluster(clp)
+
+tiempo.paralelo <- Sys.time() - tiempo.paralelo
+
+
+# GRAFICACION
+resultados <- data.frame("svm" = deteccion.error.svm,
+                         "k_vecinos" = deteccion.error.knn,
+                         "bayes" = deteccion.error.bayes,
+                         "arboles" = deteccion.error.arbol,
+                         "bosques" = deteccion.error.bosque,
+                         "potenciacion" = deteccion.error.potenciacion,
+                         "redes_nnet" = deteccion.error.red,
+                         "xgboost" = deteccion.error.xgboost,
+                         "redes_neuralnet" = deteccion.error.red.neu, 
+                         "regresion_logistica" = deteccion.error.glm)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Deteccion del Error Global", 
+        xlab = "Numero de iteracion",
+        ylab = "Porcentaje de Error",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+##### En este grafico podemos apreciar que los metodos que obtienen mejor o menor valor en la parte del error global son potenciacion, xgboost y bosques. Hasta el momento de compilado, estos serian los mejores, ya que tambien obtuvieron un buen resultado en deteccion de 1's.
+
+# 2.3
+
+#============== Matrices
+
+```{r}
+peones <- parallel::detectCores()
+clp <- makeCluster(peones, type = "SOCK")
+
+
+ejecutar.prediccion <- function(datos, formula, muestra, metodo, ...) {
+  ttesting <- datos[muestra, ]
+  ttraining <- datos[-muestra, ]
+  modelo <- do.call(metodo, list(formula, data = ttraining, ...))
+  prediccion <- predict(modelo, ttesting, type = "class")
+  MC <- confusion.matrix(ttesting, prediccion)
+  return(MC)
+}
+
+# La siguiente función permite fijar parámetros específicos para cada método, lo cual es útil para usar otros parámetros que no sean los default.
+
+ejecutar.prediccion.particular <- function(datos, formula, muestra, metodo) {
+  if(metodo == "train.svm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.knn"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo,kernel="optimal", kmax = tam))}
+  if(metodo == "train.bayes"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.rpart"){
+    return(ejecutar.prediccion(datos, tipo~ contraste + energia + homogeneidad, muestra, metodo))}
+  if(metodo == "train.randomForest"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, importance = TRUE))}
+  if(metodo == "train.ada"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, iter = 500, type = "gentle"))}
+  if(metodo == "train.nnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, size = 4, maxit = 1000, MaxNWts = 400, trace = FALSE))}
+  if(metodo == "train.xgboost"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo, nrounds = 500))}
+  if(metodo == "train.glm"){
+    return(ejecutar.prediccion(datos, formula, muestra, metodo))}
+  if(metodo == "train.neuralnet"){
+    return(ejecutar.prediccion(datos, tipo~contraste + energia + homogeneidad, muestra, metodo, hidden = c(8,6,4), linear.output = FALSE))}
+}
+
+# Constructor del cluster
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+metodos <- c("train.svm", "train.knn", "train.bayes", "train.rpart", "train.randomForest", "train.ada", "train.nnet",
+             "train.xgboost", "train.neuralnet", "train.glm")
+
+tam <- floor(sqrt(nrow(Datos))) 
+clusterExport(clp, "tam")
+
+MCs.svm <- list()
+MCs.knn <- list()
+MCs.bayes <- list()
+MCs.arbol <- list()
+MCs.bosque <- list()
+MCs.potenciacion <- list()
+MCs.red <- list()
+MCs.xgboost <- list()
+MCs.red.neu <- list()
+MCs.glm <- list()
+
+# Exportamos paquetes a los procesadores
+ignore <- clusterEvalQ(clp, {
+  library(dplyr)
+  library(traineR)
+  
+  return(NULL)
+})
+
+# Exportamos los datos y las funciones a los procesadores
+clusterExport(clp, list("Datos", "ejecutar.prediccion", "ejecutar.prediccion.particular"))
+
+tiempo.paralelo <- Sys.time()
+
+# Validación cruzada 5 veces
+for(i in 1:cantidad.validacion.cruzada) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  MC.svm <- matrix(c(0,0,0,0), nrow=2)
+  MC.knn <- matrix(c(0,0,0,0), nrow=2)
+  MC.bayes <- matrix(c(0,0,0,0), nrow=2)
+  MC.arbol <- matrix(c(0,0,0,0), nrow=2)
+  MC.bosque <- matrix(c(0,0,0,0), nrow=2)
+  MC.potenciacion <- matrix(c(0,0,0,0), nrow=2)
+  MC.red <- matrix(c(0,0,0,0), nrow=2)
+  MC.xg  <- matrix(c(0,0,0,0), nrow=2)
+  MC.red.neu <- matrix(c(0,0,0,0), nrow=2)
+  MC.glm <- matrix(c(0,0,0,0), nrow=2)
+  
+  # Este ciclo es el que hace validación cruzada con 10 grupos
+  for(k in 1:cantidad.grupos) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    # Exportamos la muestra a los procesadores
+    clusterExport(clp, "muestra")
+    
+    resultado <- clusterApply(clp, metodos, function(metodo) {
+     tryCatch({
+        MC <- ejecutar.prediccion.particular(datos = Datos, formula = tipo ~ ., muestra = muestra, metodo              = metodo)
+      
+        valores <- list(Tipo = metodo, Resultado = MC)
+        return(valores)
+      }, error = function(e) {
+        return(list(Error = as.character(e)))
+      })
+    })
+    
+    for (j in seq_along(metodos)) {
+      if (resultado[[j]][[1]] == "train.svm")
+        MC.svm <- MC.svm + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.knn")
+        MC.knn <- MC.knn + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.bayes")
+        MC.bayes <- MC.bayes + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.rpart")
+        MC.arbol <- MC.arbol + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.randomForest")
+        MC.bosque <- MC.bosque + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.ada")
+        MC.potenciacion <- MC.potenciacion + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.nnet")
+        MC.red <- MC.red + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.xgboost")
+        MC.xg <- MC.xg + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.neuralnet")
+        MC.red.neu <- MC.red.neu + resultado[[j]][[2]]
+      else if (resultado[[j]][[1]] == "train.glm")
+        MC.glm <- MC.glm + resultado[[j]][[2]]
+    }
+    
+  }
+  MCs.svm[[i]] <- MC.svm
+  MCs.knn[[i]] <- MC.knn
+  MCs.bayes[[i]] <- MC.bayes
+  MCs.arbol[[i]] <- MC.arbol
+  MCs.bosque[[i]] <- MC.bosque
+  MCs.potenciacion[[i]] <- MC.potenciacion
+  MCs.red[[i]] <- MC.red
+  MCs.xgboost[[i]]<- MC.xg
+  MCs.red.neu[[i]] <- MC.red.neu
+  MCs.glm[[i]] <- MC.glm
+}
+
+stopCluster(clp)
+
+```
+
+```{r}
+
+# GRAFICACION 1's
+resultados <- data.frame("svm"     = sapply(MCs.svm,precision("1")),
+                         "knn"     =sapply(MCs.knn,precision("1")) ,
+                         "bayes" = sapply(MCs.bayes,precision("1")),
+                         "arbol"     = sapply(MCs.arbol,precision("1")),
+                         "bosque"     = sapply(MCs.bosque,precision("1")),
+                         "potenciacion" = sapply(MCs.potenciacion,precision("1")),
+                         "red.n"     = sapply(MCs.red,precision("1")),
+                         "xgboost"     =sapply(MCs.xgboost,precision("1")) ,
+                         "red.neu" = sapply(MCs.red.neu,precision("1"))) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 8))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de 1's detectados",main = "Comparacion de porcentaje de 1's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+
+
+
+#===============================================
+
+
+# GRAFICACION 0's
+resultados <- data.frame("svm"     = sapply(MCs.svm,precision("0")),
+                         "knn"     =sapply(MCs.knn,precision("0")) ,
+                         "bayes" = sapply(MCs.bayes,precision("0")),
+                         "arbol"     = sapply(MCs.arbol,precision("0")),
+                         "bosque"     = sapply(MCs.bosque,precision("0")),
+                         "potenciacion" = sapply(MCs.potenciacion,precision("0")),
+                         "red"     = sapply(MCs.red,precision("0")),
+                         "xgboost"     =sapply(MCs.xgboost,precision("0")) ,
+                         "red.neu" = sapply(MCs.red.neu,precision("0"))) # Preparamos los datos
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, 1),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de 0's detectados",main = "Comparacion de porcentaje de 0's detectados",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend("topright",legend = colnames(resultados),fill = rainbow(ncol(resultados)),border = NA)
+
+#==========================================
+
+# GRAFICACION Error global
+
+resultados <- data.frame("svm"     = sapply(MCs.svm,error.global),
+                         "knn"     =sapply(MCs.knn,error.global) ,
+                         "bayes" = sapply(MCs.bayes,error.global),
+                         "arbol"     = sapply(MCs.arbol,error.global),
+                         "bosque"     = sapply(MCs.bosque,error.global),
+                         "potenciacion" = sapply(MCs.potenciacion,error.global),
+                         "red.n"     = sapply(MCs.red,error.global),
+                         "xgboost"     =sapply(MCs.xgboost,error.global) ) # Preparamos los datos
+
+par(oma = c(0, 0, 0, 0))  # Hace espacio para la leyenda
+
+# Crear el gráfico de barras
+barplot(t(resultados),beside = TRUE,ylim = c(0, max(resultados)),names.arg = 1:nrow(resultados),xlab ="Numero de iteracion",ylab = "Porcentaje de Error Global",main = "Comparacion de Error Global",col = rainbow(ncol(resultados)))
+
+# Agregar la leyenda
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+
+```
+
+# 3.4
+
+##### De acuerdo a los resultados obtenidos, y mediante la graficacion, se puede observar que los mejores metodos son bosques y xgboost, por tanto, estos dos serian los metodos que yo utilizaria para estos datos.

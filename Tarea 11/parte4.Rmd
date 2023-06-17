@@ -1,0 +1,378 @@
+---
+title: "parte 4"
+author: "Alejandro Barrantes Castro"
+date: "2023-05-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(dplyr)
+library(glue)
+library(tidyverse)
+library(scales)
+library(class)
+library(e1071)
+library(randomForest)
+```
+
+
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 7/Datos Clase y Tareas")
+Datos <- read.csv("Tumores.csv", header=TRUE, sep=',',dec='.',stringsAsFactors = T)
+enteros <- sapply(Datos, is.integer)
+Datos[enteros] <- lapply(Datos[enteros], as.factor)
+
+Datos$tipo <- factor(Datos$tipo)
+Datos <- subset(Datos, select = -1)
+
+set.seed(123) # Fijamos la semilla para reproducibilidad
+indice <- createDataPartition(y = Datos$tipo, p = 0.25, list = FALSE)
+ttesting <- Datos[indice, ]
+ttraining <- Datos[-indice, ]
+str(Datos)
+
+```
+
+# EJERCICIO 4
+
+```{r}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+#si's
+deteccion.si.svm <- c()
+deteccion.si.knn <- c()
+deteccion.si.arboles <- c()
+deteccion.si.bosques <- c()
+deteccion.si.potenciacion <- c()
+deteccion.si.xgboost <- c()
+deteccion.si.nnet <- c()
+
+#errores
+deteccion.error.svm <- c()
+deteccion.error.knn <- c()
+deteccion.error.arboles <- c()
+deteccion.error.bosques <- c()
+deteccion.error.potenciacion <- c()
+deteccion.error.xgboost <- c()
+deteccion.error.nnet <- c()
+
+
+
+
+for(i in 1:2){
+  grupos  <- createFolds(1:numero.filas, cantidad.grupos)  # Crea los 10 grupos
+  si.svm <- 0
+  si.knn <- 0
+  si.arboles <- 0
+  si.bosques <- 0
+  si.potenciacion <- 0
+  si.xgboost <- 0
+  si.nnet <- 0
+  
+  error.svm <- 0
+  error.knn <- 0
+  error.arboles <- 0
+  error.bosques <- 0
+  error.potenciacion <- 0
+  error.xgboost <- 0
+  error.nnet <- 0
+  
+  # Este ciclo es el que hace 'cross-validation' (validación cruzada) con 10
+  # grupos (Folds)
+  for(k in 1:2) {
+    muestra <- grupos[[k]]  # Por ser una lista requiere de doble paréntesis
+    ttesting <- Datos[muestra, ]
+    taprendizaje <- Datos[-muestra, ]
+    
+    #svm
+    modelo <- train.svm(tipo ~ ., data = ttraining)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.svm <- si.svm + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.svm<-error.svm+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    
+     #knn
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.knn <- si.knn + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.knn<-error.knn+(1-(sum(diag(MC)))/sum(MC))*100
+    
+     #arboles
+    modelo <- train.rpart(tipo~ contraste + energia + homogeneidad,data = taprendizaje, minsplit=2)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.arboles <- si.arboles + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.arboles<-error.arboles+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #bosques
+    modelo <- train.randomForest(tipo~ .,data=taprendizaje,importance=TRUE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.bosques <- si.bosques + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.bosques<-error.bosques+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #potenciacion
+    modelo <- train.ada(formula = tipo~.,data = taprendizaje, iter=500)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.potenciacion <- si.potenciacion + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.potenciacion<-error.potenciacion+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #xgboost
+    modelo <- train.xgboost(formula = tipo~.,data = taprendizaje,nrounds = 500,verbose = F)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.xgboost <- si.xgboost + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.xgboost<-error.xgboost+(1-(sum(diag(MC)))/sum(MC))*100
+    
+    #nnet
+    modelo <- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = taprendizaje, size = 4, maxit   = 1000, MaxNWts = 400,trace=FALSE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    si.nnet <- si.nnet + MC[2,2] # Detección de 1's
+    # Cálculo del ERROR
+    error.nnet<-error.nnet+(1-(sum(diag(MC)))/sum(MC))*100
+  }
+  
+  deteccion.si.svm[i] <- si.svm
+  deteccion.si.knn[i] <- si.knn
+  deteccion.si.arboles[i] <- si.arboles
+  deteccion.si.bosques[i] <- si.bosques
+  deteccion.si.potenciacion[i] <- si.potenciacion
+  deteccion.si.xgboost[i] <- si.xgboost
+  deteccion.si.nnet[i] <- si.nnet
+  
+  #errores
+  
+  deteccion.error.svm[i] <- error.svm/cantidad.grupos
+  deteccion.error.knn[i] <- error.knn/cantidad.grupos
+  deteccion.error.arboles[i] <- error.arboles/cantidad.grupos
+  deteccion.error.bosques[i] <- error.bosques/cantidad.grupos
+  deteccion.error.potenciacion[i] <- error.potenciacion/cantidad.grupos
+  deteccion.error.xgboost[i] <- error.xgboost/cantidad.grupos
+  deteccion.error.nnet[i] <- error.nnet/cantidad.grupos
+  
+}
+
+#===============
+resultados <- data.frame("svm" = deteccion.si.svm,
+                         "knn" = deteccion.si.knn,
+                         "arboles" = deteccion.si.arboles,
+                         "bosques" = deteccion.si.bosques,
+                         "potenciacion" = deteccion.si.potenciacion,
+                         "xgboost" = deteccion.si.xgboost,
+                         "nnet" = deteccion.si.nnet)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Detección del Si Tumor", 
+        xlab = "Número de iteración",
+        ylab = "Cantidad de Si tumores detectados",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+
+# Errores
+
+resultados <- data.frame("svm" = deteccion.error.svm,
+                         "knn" = deteccion.error.knn,
+                         "arboles" = deteccion.error.arboles,
+                         "bosques" = deteccion.error.bosques,
+                         "potenciacion" = deteccion.error.potenciacion,
+                         "xgboost" = deteccion.error.xgboost,
+                         "nnet" = deteccion.error.nnet)
+
+par(oma=c(0, 0, 0, 8)) # Hace espacio para la leyenda
+matplot(resultados, type="b", lty = 1, lwd = 1, pch = 1:ncol(resultados),
+        main = "Comparación del Error Global", 
+        xlab = "Número de iteración",
+        ylab = "Porcentaje de Error Global",
+        col = rainbow(ncol(resultados)))
+legend(par('usr')[2], par('usr')[4], legend = colnames(resultados),bty='n', xpd=NA, cex = 0.8,
+       pch=1:ncol(resultados), col = rainbow(ncol(resultados))) # La leyenda
+```
+
+# nnet o svm o bosques
+# 4.2
+
+```{r}
+numero.filas <- nrow(Datos)
+cantidad.validacion.cruzada <- 5
+cantidad.grupos <- 10
+tam <- floor(sqrt(nrow(Datos))) 
+
+ # Lista para almacenar las matrices de confusión por iteración
+lista.matrices.svm <- list() 
+lista.matrices.knn <- list()  
+lista.matrices.arboles <- list()  
+lista.matrices.bosques <- list()  
+lista.matrices.potenciacion <- list()  
+lista.matrices.xgboost <- list()  
+lista.matrices.nnet <- list() 
+
+
+
+for (i in 1:2) {
+  grupos <- createFolds(1:numero.filas, cantidad.grupos)
+  # Lista para almacenar las matrices de confusión por cada k
+  matrices.svm <- list()  
+  matrices.knn <- list() 
+  matrices.arboles <- list()  
+  matrices.bosques <- list() 
+  matrices.potenciacion <- list()  
+  matrices.xgboost <- list() 
+  matrices.nnet <- list()  
+  
+  for (k in 1:2) {
+    muestra <- grupos[[k]]
+    ttesting <- Datos[muestra, ]
+    taprendizaje <- Datos[-muestra, ]
+    
+    # svm
+    modelo <- train.svm(tipo ~ ., data = ttraining)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.svm[[k]] <- MC
+    
+    # knn
+    modelo <- train.knn(tipo ~ ., data = ttraining, kmax = tam, kernel = "triangular")
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.knn[[k]] <- MC
+    
+    #arboles
+    modelo <- train.rpart(tipo~ contraste + energia + homogeneidad,data = taprendizaje, minsplit=2)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.arboles[[k]] <-MC
+    
+    #bosques
+    modelo <- train.randomForest(tipo~ .,data=taprendizaje,importance=TRUE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.bosques[[k]]<-MC
+    
+    #potenciacion
+    modelo <- train.ada(formula = tipo~.,data = taprendizaje, iter=500)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.potenciacion[[k]]<-MC
+    
+    #xgboost
+    modelo <- train.xgboost(formula = tipo~.,data = taprendizaje,nrounds = 500,verbose = F)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.xgboost[[k]]<-MC
+
+    #nnet
+    modelo <- train.nnet(formula = tipo~contraste + energia + homogeneidad,data = taprendizaje, size = 4, maxit   = 1000, MaxNWts = 400,trace=FALSE)
+    prediccion <- predict(modelo, ttesting)
+    MC <- confusion.matrix(ttesting, prediccion)
+    matrices.nnet[[k]]<-MC
+    
+  }
+  
+   #inserta el promedio de las matrices del for interno en otra lista
+  lista.matrices.svm[[i]] <- Reduce(`+`, matrices.svm) / length(matrices.svm)
+  lista.matrices.knn[[i]] <-  Reduce(`+`, matrices.knn) / length(matrices.knn)
+  lista.matrices.arboles[[i]] <- Reduce(`+`, matrices.arboles) / length(matrices.arboles)
+  lista.matrices.bosques[[i]] <-  Reduce(`+`, matrices.bosques) / length(matrices.bosques)
+  lista.matrices.potenciacion[[i]] <- Reduce(`+`, matrices.potenciacion) / length(matrices.potenciacion)
+  lista.matrices.xgboost[[i]] <-  Reduce(`+`, matrices.xgboost) / length(matrices.xgboost)
+  lista.matrices.nnet[[i]] <- Reduce(`+`, matrices.nnet) / length(matrices.nnet)
+  
+}
+
+
+#saca el promedio de la lista de matrices de confusion promedio
+matriz.promedio.svm <- Reduce(`+`, lista.matrices.svm) / length(lista.matrices.svm)
+matriz.promedio.knn <- Reduce(`+`, lista.matrices.knn) / length(lista.matrices.knn)
+matriz.promedio.arboles <-Reduce(`+`, lista.matrices.arboles) / length(lista.matrices.arboles)
+matriz.promedio.bosques <- Reduce(`+`, lista.matrices.bosques) / length(lista.matrices.bosques)
+matriz.promedio.potenciacion <- Reduce(`+`, lista.matrices.potenciacion) / length(lista.matrices.potenciacion)
+matriz.promedio.xgboost <- Reduce(`+`, lista.matrices.xgboost) / length(lista.matrices.xgboost)
+matriz.promedio.nnet <- Reduce(`+`, lista.matrices.nnet) / length(lista.matrices.nnet)
+
+
+# Medicion de 1's
+resultados <- data.frame("svm" = matriz.promedio.svm[2,2],
+                         "knn" = matriz.promedio.knn[2,2],
+                         "arboles" = matriz.promedio.arboles[2,2],
+                         "bosques" = matriz.promedio.bosques[2,2],
+                         "ada" = matriz.promedio.potenciacion[2,2],
+                         "xgboost" = matriz.promedio.xgboost[2,2],
+                         "nnet" = matriz.promedio.nnet[2,2])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+
+```{r}
+# Medicion de 0's
+resultados <- data.frame("svm" = matriz.promedio.svm[1,1],
+                         "knn" = matriz.promedio.knn[1,1],
+                         "arboles" = matriz.promedio.arboles[1,1],
+                         "bosques" = matriz.promedio.bosques[1,1],
+                         "ada" = matriz.promedio.potenciacion[1,1],
+                         "xgboost" = matriz.promedio.xgboost[1,1],
+                         "nnet" = matriz.promedio.nnet[1,1])
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+
+```{r}
+# Medicion de error
+
+
+resultados <- data.frame("svm" = general.indexes(mc=matriz.promedio.svm)$overall.error,
+                         "knn" = general.indexes(mc=matriz.promedio.knn)$overall.error,
+                         "arbol" = general.indexes(mc=matriz.promedio.arboles)$overall.error,
+                         "bosqu" = general.indexes(mc=matriz.promedio.bosques)$overall.error,
+                         "ada" = general.indexes(mc=matriz.promedio.potenciacion)$overall.error,
+                         "xgboost" = general.indexes(mc=matriz.promedio.xgboost)$overall.error,
+                         "nnet" = general.indexes(mc=matriz.promedio.nnet)$overall.error,
+                         "gauss" = general.indexes(mc=matriz.promedio.gaussian)$overall.error,
+                         "opt" = general.indexes(mc=matriz.promedio.optimal)$overall.error)
+
+
+# Obtener los nombres de las columnas
+nombres_columnas <- colnames(resultados)
+
+# Crear el gráfico de barras
+barplot(as.matrix(resultados), beside = TRUE, legend.text = TRUE,
+        main = "Promedio de Matrices de Confusión", xlab = "Método",
+        ylab = "Promedio", names.arg = nombres_columnas)
+```
+

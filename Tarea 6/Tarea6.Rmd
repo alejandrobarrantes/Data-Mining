@@ -1,0 +1,314 @@
+---
+title: "Tarea6"
+author: "Keisy Arroyo Villarreal"
+date: "2023-04-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(traineR)
+library(ggplot2)
+```
+
+## Pregunta 4
+
+```{r}
+equilibrio.variable.predecir <- function(datos, variable.predecir, ylab = "Cantidad de individuos", 
+                                        xlab = "", main = paste("Distribución de la variable",variable.predecir), col = NA) {
+  gg_color <- function (n) {
+     hues <- seq(15, 375, length = n + 1)
+     hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  if(missing(variable.predecir) | !(variable.predecir %in% colnames(datos))){
+    stop("variable.predecir tiene que ser ingresada y ser un nombre de columna", call. = FALSE )
+  }
+  if(is.character(datos[,variable.predecir]) | is.factor(datos[,variable.predecir])){
+    if(length(col) == 0 || is.na(col)){
+      col <- gg_color(length(unique(datos[,variable.predecir])))
+    }else{
+      col <- rep(col,length(unique(datos[,variable.predecir])))
+    }
+    ggplot(data = datos, mapping = aes_string(x = variable.predecir, fill = variable.predecir)) +
+      geom_bar() +
+      scale_fill_manual(values = col, name = variable.predecir) +
+      labs(x = xlab, y = ylab, title = main) +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+  }else{
+    stop("La variable a predecir tienen que ser de tipo factor o character", call. = FALSE )
+  }
+}
+
+poder.predictivo.numerica <- function(datos, variable.predecir, variable.comparar, ylab = "", 
+                                       xlab = "", main = paste("Densidad de la variable", variable.comparar, 'según', variable.predecir), col = NA){
+  gg_color <- function (n) {
+     hues <- seq(15, 375, length = n + 1)
+     hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  if(missing(variable.predecir) | !(variable.predecir %in% colnames(datos))){
+    stop("variable.predecir tiene que ser ingresada y ser un nombre de columna", call. = FALSE )
+  }
+  if(missing(variable.comparar) | !(variable.comparar %in% colnames(datos)) | !is.numeric(datos[,variable.comparar])){
+    stop("variable.comparar tiene que ser ingresada y ser un nombre de columna numérica", call. = FALSE )
+  }
+  
+  if(is.character(datos[,variable.predecir]) | is.factor(datos[,variable.predecir])){
+    if(length(col) == 0 || is.na(col)){
+      col <- gg_color(length(unique(datos[,variable.predecir])))
+    }else{
+      col <- rep(col,length(unique(datos[,variable.predecir])))
+    }
+    
+    ggplot(data = datos, aes_string(variable.comparar, fill = variable.predecir)) +
+      geom_density(alpha = .7, color = NA) +
+      scale_fill_manual(values = col) +
+      labs(title = main , y = ylab, x = xlab ,fill = variable.predecir) +
+      theme_minimal() +
+      theme(legend.position = 'bottom',
+            legend.title = element_blank(),
+            text = element_text(size = 15))
+    
+  }else{
+    stop("La variable a predecir tienen que ser de tipo factor o character", call. = FALSE )
+  }
+}
+
+poder.predictivo.categorica <- function(datos, variable.predecir, variable.comparar, ylab = "", 
+                                        xlab = "", main = paste("Densidad de la variable", variable.comparar, 'según', variable.predecir), col = NA) {
+  gg_color <- function (n) {
+     hues <- seq(15, 375, length = n + 1)
+     hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  if(missing(variable.predecir) | !(variable.predecir %in% colnames(datos))){
+    stop("variable.predecir tiene que ser ingresada y ser un nombre de columna", call. = FALSE )
+  }
+  if(missing(variable.comparar) | !(variable.comparar %in% colnames(datos)) | 
+     !(is.factor(datos[,variable.comparar]) | is.character(datos[,variable.comparar])) ){
+    stop("variable.comparar tiene que ser ingresada y ser un nombre de columna categórica", call. = FALSE )
+  }
+  
+  if(is.character(datos[,variable.predecir]) | is.factor(datos[,variable.predecir])){
+    if(length(col) == 0 || is.na(col)){
+      col <- gg_color(length(unique(datos[,variable.predecir])))
+    }else{
+      col <- rep(col,length(unique(datos[,variable.predecir])))
+    }
+    
+    datos2 <- datos %>%
+      dplyr::group_by_(variable.comparar, variable.predecir) %>%
+      dplyr::summarise(count = n())
+    
+    if(variable.comparar != variable.predecir){
+      datos2 <-   datos2 %>% dplyr::group_by_(variable.comparar)
+    }
+    datos2 <- datos2 %>% dplyr::mutate(prop = round(count/sum(count),4))
+  
+    ggplot(data = datos2, mapping = aes_string(x = variable.comparar, y = "prop", fill = variable.predecir)) +
+      geom_col(position = "fill") +
+      geom_text(aes(label = glue("{percent(prop)} ({count})")), position = position_stack(vjust = .5), color = "white") +
+      scale_y_continuous(label = percent) +
+      labs(y =  xlab, x  = ylab, title = main) +
+      scale_fill_manual(values = col, name = variable.predecir) +
+      theme(legend.position = "bottom")+
+      coord_flip()
+    
+  }else{
+    stop("La variable a predecir tienen que ser de tipo factor o character", call. = FALSE )
+  }
+}
+# Índices para matrices NxN
+indices.general <- function(MC) {
+  precision.global <- sum(diag(MC))/sum(MC)
+  error.global <- 1 - precision.global
+  precision.categoria <- diag(MC)/rowSums(MC)
+  res <- list(matriz.confusion = MC, precision.global = precision.global, error.global = error.global, 
+              precision.categoria = precision.categoria)
+  names(res) <- c("Matriz de Confusión", "Precisión Global", "Error Global", 
+                  "Precisión por categoría")
+  return(res)
+}
+```
+
+### 4.1
+
+```{r}
+#Cargando tabla de datos 
+Datos <- read.csv('Tumores.csv', header=TRUE, sep=',',dec = '.',stringsAsFactors = T)
+Datos$tipo <- factor(Datos$tipo)
+str(Datos)
+```
+
+```{r}
+equilibrio.variable.predecir(Datos,"tipo")
+```
+
+```{r}
+#25% de los datos para testing y el 75% para aprendizaje
+numero.filas <- dim(Datos)[1]
+muestra <- sample(1:numero.filas,numero.filas*0.25)
+ttesting <- Datos[muestra, ]
+taprendizaje <- Datos[-muestra, ]
+```
+
+```{r}
+modelo<-train.knn(tipo~.,data=taprendizaje,kmax=floor(sqrt(numero.filas)))
+modelo
+```
+
+```{r}
+prediccion <- predict(modelo, ttesting, type = "class")
+head(prediccion$prediction)
+```
+
+```{r}
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+### 4.2
+
+Modelo Predictivo usando K vecinos mas cercanos para cada uno de los siguientes nucleos
+
+```{r}
+#Rectangular
+modelo.rectangular<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "rectangular")
+modelo.rectangular
+
+#Prediccion 
+prediccion <- predict(modelo.rectangular, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+```{r}
+#Triangular
+modelo.triangular<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "triangular")
+modelo.triangular
+
+#Prediccion 
+prediccion <- predict(modelo.triangular, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+```{r}
+#Epanechnikov
+modelo.epanechnikov<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "epanechnikov")
+modelo.epanechnikov
+#Prediccion 
+prediccion <- predict(modelo.epanechnikov, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+```{r}
+#Biweight
+modelo.biweight<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "biweight")
+modelo.biweight
+
+#Prediccion 
+prediccion <- predict(modelo.biweight, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+```{r}
+#Triweight
+modelo.triweight<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "triweight")
+modelo.triweight
+
+#Prediccion 
+prediccion <- predict(modelo.rectangular, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+
+```
+
+```{r}
+#Cos
+modelo.cos<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "cos")
+modelo.cos
+
+#Prediccion 
+prediccion <- predict(modelo.cos, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+```{r}
+#Inv
+modelo.inv<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "inv")
+modelo.inv
+
+#Prediccion 
+prediccion <- predict(modelo.inv, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+
+```
+
+```{r}
+#Gaussian
+modelo.gaussian<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "gaussian")
+modelo.gaussian
+
+#Prediccion 
+prediccion <- predict(modelo.gaussian, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+
+```
+
+```{r}
+#Optimal
+modelo.optimal<- train.knn(tipo~., data = taprendizaje, kmax=floor(sqrt(numero.filas)), kernel = "optimal")
+modelo.optimal
+
+#Prediccion 
+prediccion <- predict(modelo.optimal, ttesting, type = "class")
+head(prediccion$prediction)
+
+#Matriz de confusion
+MC <- confusion.matrix(ttesting, prediccion)
+# Índices de Calidad de la predicción
+general.indexes(mc = MC)
+```
+
+Los mejores resultados donde se predice mejor tumor = 1, se producen al usar los núcleos Optimal, Triagular y triweight.

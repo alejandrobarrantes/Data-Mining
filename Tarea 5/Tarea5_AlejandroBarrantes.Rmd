@@ -1,0 +1,241 @@
+---
+title: "Tarea5_AlejandroBarrantes"
+author: "Alejandro Barrantes Castro"
+date: "2023-04-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR") 
+library("factoextra")
+library("cluster")
+library("fmsb")
+library(tidyverse)
+library(dendextend)
+library(patchwork)
+color <- c("red","blue")
+color2 <- c("#FF6449", "#FEB035", "#FCE020", "#F7EC69", "#F1F8BE","#D5B9F6",
+                     "#A2E3CD","#EDF380", "#D8FD9C", "#AEEC64", "#F598F8", "#9EFF37")
+```
+
+# EJERCICIO #1
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 4/DatosTarea")
+Datos <- read.table("EjemploAlgoritmosRecomendacion.csv", header=TRUE, sep=';',dec=',',row.names=1)
+```
+
+## a) Ejecute el metodo k−medias con iter.max = 200, nstart = 100 para k = 4, luego desde RStudio verifique el Teorema de Fisher para este ejemplo
+
+```{r}
+mis.datos <- scale(Datos)
+grupos <- kmeans(x = mis.datos, centers = 4, iter.max = 200, nstart = 100)
+
+# Verificación del Teorema de Fisher
+grupos$totss==grupos$tot.withinss+grupos$betweenss
+```
+
+## b) Ejecute el metodo k−medias con iter.max = 200, nstart = 100 , para esto encuentre valor de k usando los metodos Gap Statistic, wss y Average Silhouette usando la funcion fviz nbclust, luego interprete los resultados usando interpretacion Horizontal-Vertical y graficos tipo radar plot.
+
+### Gap-Statistic:
+```{r}
+fviz_nbclust(mis.datos, kmeans, method = "gap_stat", nstart = 100, iter.max = 200) +
+  ggtitle("Gap Statistic")
+grupos<-kmeans(mis.datos,centers=1,iter.max=200,nstart=100)
+# Centros
+centros<-grupos$centers
+# Gráfico Tipo Araña
+rownames(centros)<-c("Cluster 1")
+centros<-as.data.frame(centros)
+maximos<-apply(centros,2,max)
+minimos<-apply(centros,2,min)
+centros<-rbind(minimos,centros)
+centros<-rbind(maximos,centros)
+
+radarchart(as.data.frame(centros),maxmin=TRUE,axistype=4,axislabcol="slategray4",
+           centerzero=FALSE,seg=8, cglcol="gray67",
+           pcol=color,plty=1,plwd=5,title="Comparación de clústeres")
+legenda <-legend(1.5,1, legend=c("Cluster 1","Cluster 2"),
+                 seg.len=-1.4,title="Clústeres",pch=21,bty="n" ,lwd=3, y.intersp=1, 
+                 horiz=FALSE,col=color)
+# Grafico de barras
+barplot(t(grupos$centers),beside=TRUE,legend=colnames(Datos),main = "Gráfico de Interpretación de Clases",col=color2,ylim=c(-1,4),cex.names = 0.7)
+```
+
+### WSS:
+```{r}
+fviz_nbclust(mis.datos, kmeans, method = "wss", nstart = 100, iter.max = 200) +
+  ggtitle("Within-Cluster Sum of Squares")
+
+#asociar a los emtodos de arriba
+# Sacando Grupos
+grupos<-kmeans(mis.datos,centers=3,iter.max=200,nstart=100)
+# Centros
+centros<-grupos$centers
+# Gráfico Tipo Araña
+rownames(centros)<-c("Cluster 1","Cluster 2","Cluster 3")
+centros<-as.data.frame(centros)
+maximos<-apply(centros,2,max)
+minimos<-apply(centros,2,min)
+centros<-rbind(minimos,centros)
+centros<-rbind(maximos,centros)
+
+color <- c("#FCEBB6","#78C0A8","#5E412F")
+radarchart(as.data.frame(centros),maxmin=TRUE,axistype=4,axislabcol="slategray4",
+           centerzero=FALSE,seg=8, cglcol="gray67",
+           pcol=color,plty=1,plwd=5,title="Comparación de clústeres")
+legenda <-legend(1.5,1, legend=c("Cluster 1","Cluster 2","Cluster 3"),
+                 seg.len=-1.4,title="Clústeres",pch=21,bty="n" ,lwd=3, y.intersp=1, 
+                 horiz=FALSE,col=color)
+# Grafico de barras
+barplot(t(grupos$centers),beside=TRUE,main = "Gráfico de Interpretación de Clases",col=color2,ylim=c(-1,1),cex.names = 0.7)
+```
+
+
+
+### Silhouette:
+```{r}
+fviz_nbclust(mis.datos, kmeans, method = "silhouette", nstart = 100, iter.max = 200) +
+  ggtitle("Average Silhouette")
+
+# Sacando Grupos
+grupos<-kmeans(mis.datos,centers=3,iter.max=200,nstart=100)
+# Centros
+centros<-grupos$centers
+# Gráfico Tipo Araña
+rownames(centros)<-c("Cluster 1","Cluster 2","Cluster 3")
+centros<-as.data.frame(centros)
+maximos<-apply(centros,2,max)
+minimos<-apply(centros,2,min)
+centros<-rbind(minimos,centros)
+centros<-rbind(maximos,centros)
+
+radarchart(as.data.frame(centros),maxmin=TRUE,axistype=4,axislabcol="slategray4",
+           centerzero=FALSE,seg=8, cglcol="gray67",
+           pcol=color2,plty=1,plwd=5,title="Comparación de clústeres")
+legenda <-legend(1.5,1, legend=c("Cluster 1","Cluster 2","Cluster 3"),
+                 seg.len=-1.4,title="Clústeres",pch=21,bty="n" ,lwd=3, y.intersp=1, 
+                 horiz=FALSE,col=color2)
+# Grafico de barras
+barplot(t(grupos$centers),beside=TRUE,main = "Gráfico de Interpretación de Clases",col=color2,ylim=c(-1.5,1.5),cex.names = 0.7)
+
+```
+
+## c) Si se tienen 7 clusteres usando usando el metodo de k-medias ¿Que productos recomendarıa a Teresa, a Leo y a Justin?, es decir, ¿los productos que compra cual otro cliente? Usando distancia euclıdea ¿cual es la mejor recomendacion de compra que le podemos hacer a Teresa, a Leo y a Justin?
+
+```{r}
+grupos<-kmeans(mis.datos,centers=7,iter.max=200,nstart=100)
+str(Datos)
+datos.escalado <- data.frame(scale(Datos), grupos$cluster)
+clusplot(datos.escalado, grupos$cluster, color=TRUE, shade=TRUE, 
+         labels=2, lines=0)
+```
+
+![7 Clusteres!](plot1c.png)
+
+### Como se puede observar en la imagen, para Teresa yo le recomendaria las productos que compra cualquier otro cliente del cluster en el que ella se encuentra. La mejor recomendacion para Teresa utilizando distancia euclidea es la de Marisol.
+### Para Leo yo le recomendaria las productos que compra cualquier otro cliente del cluster en el que el se encuentra. La mejor recomendacion para Leo utilizando distancia euclidea es la de Susana, ya que es la mas cercana
+### Para Justin yo le recomendaria las productos que compra cualquier otro cliente del cluster en el que el se encuentra. La mejor recomendacion para Justin utilizando distancia euclidea es la de Maura, ya que es la mas cercana a el en el grafico
+
+
+# Ejercicio #2
+
+## a) Cargue la tabla de datos y ejecute un str(...), summary(...) y un dim(...), verifique la correcta lectura de los datos.
+
+```{r}
+setwd("~/ALEJANDRO/1er Ciclo 2023/Mineria de Datos/Tarea 5")
+Datos <- read.csv('DatosBeijing.csv', header=TRUE, sep=',',dec='.',row.names=1)
+str(Datos)
+summary(Datos)
+dim(Datos)
+```
+
+### b) Elimine las filas con NA usando el comando na.omit(...). ¿Cuantas filas de eliminaron?
+```{r}
+Datos.sin.na<-na.omit(Datos)
+```
+### Se eliminaron:
+```{r}
+nrow(Datos)-nrow(Datos.sin.na)
+```
+
+## c) Elimine de la tabla de datos la variable DireccionViento. ¿Por que se debe eliminar?
+```{r}
+Datos.sin.na <- subset(Datos.sin.na, select = -DireccionViento)
+```
+### se debe eliminar debido a que es de tipo cualitativa y la otra alternativa seria convertirla a tipo factor por niveles, a tipo daisy.
+
+## d) ¿Que pasa si ejecutamos un clustering jerarquico con hclust(...). ¿Por que sucede esto?
+```{r}
+#modelo <- hclust(dist(Datos.sin.na),method = "complete")
+#modelo
+```
+
+### Se queda pegado ya que estamos utilizando un alto volumen de datos, mas de 40 mil filas estan siendo procesadas, esto significa que se necesita mucha memoria para procesarlo ya que el numero de procesos seria proximadamente de 40000x40000, terminando en mucho. LO mejor seria utilizar el k-means o aplicarlo sobre los PCA, para reducir el tamannio de los procesos que se deben realizar
+
+## e) Ejecute un k-medias con k = 3, iter.max=1000 y nstart=50.
+## f ) De una interpretacion de los resultados usando un grafico tipo radar.
+```{r}
+grupos<-kmeans(Datos.sin.na,centers=3,iter.max=100, nstart=50)  
+centros<-grupos$centers
+rownames(centros)<-c("Cluster 1","Cluster 2","Cluster 3")
+centros<-as.data.frame(centros)
+maximos<-apply(centros,2,max)
+minimos<-apply(centros,2,min)
+centros<-rbind(minimos,centros)
+centros<-rbind(maximos,centros)
+
+color <- c("#FCEBB6","#78C0A8","#5E412F")
+
+radarchart(as.data.frame(centros),maxmin=TRUE,axistype=4,axislabcol="slategray4",
+           centerzero=FALSE,seg=8, cglcol="gray67",
+           pcol=color,plty=1,plwd=5,title="Comparación de clústeres")
+
+legenda <-legend(1.5,1, legend=c("Cluster 1","Cluster 2","Cluster 3"),
+                 seg.len=-1.4,title="Clústeres",pch=21,bty="n" ,lwd=3, y.intersp=1,   horiz=FALSE,col=color)
+```
+
+## g) Construya el Codo de Jambu usando iter.max=100 y nstart=5, ¿cuantos conglomerados (clusteres) sugiere el codo? 
+```{r}
+centers <- matrix(c(0,3,1,3,0,4), 3, 2, byrow=T)
+generate <- function(n=50, extradim=0, sigma=1, mu=7) { 
+  data1 <- matrix(rnorm(n*2), n, 2) * sigma 
+  data1[,1] <- data1[,1] + centers[1,1] * mu
+  data1[,2] <- data1[,2] + centers[1,2] * mu
+  data2 <- matrix(rnorm(n*2), n, 2) * sigma 
+  data2[,1] <- data2[,1] + centers[2,1] * mu
+  data2[,2] <- data2[,2] + centers[2,2] * mu
+  data3 <- matrix(rnorm(n*2), n, 2) * sigma 
+  data3[,1] <- data3[,1] + centers[3,1] * mu
+  data3[,2] <- data3[,2] + centers[3,2] * mu
+  data <- rbind(data1,data2,data3)
+  if (extradim > 0) {
+    noise <- matrix(rnorm(3*n*extradim)*sigma, 3*n, extradim)
+    data <- cbind(data, noise)
+  }
+  return(data)
+}
+
+#Datos.sin.na <- generate(extradim=0)
+InerciaIC<-rep(0,30)
+suppressWarnings(for(k in 1:30) {
+  grupos<-kmeans(Datos.sin.na,centers=k,iter.max = 100,nstart=5)
+  InerciaIC[k]<-grupos$tot.withinss
+})
+suppressWarnings(plot(InerciaIC,col="blue",type="b"))
+```
+
+### Viendo el grafico, se sugieren aproximadamente 3 clusteres para los datos
+## Utilice tambien el metodo silhouette de la funcion fviz nbclust, ¿cuantos conglomerados (clusteres) sugiere este metodo?
+### Utilizare 10mil filas, ya que al usar todas, excede la memoria ram de mi pc
+```{r}
+mis.datos <- scale(Datos.sin.na)
+suppressWarnings(fviz_nbclust(mis.datos[1:10000,], kmeans, method = "silhouette",nstart = 100, iter.max = 5))
+```
+
+
+
+
+
+
+
